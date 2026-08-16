@@ -1117,7 +1117,7 @@ async function callOllama(chatId, userPrompt, attachedFiles) {
     history.push({ role: 'user', content: finalUserText });
   }
 
-  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by your own self-hosted local model. Always identify as RextFlex AI. Answer helpfully in the user's language. Be concise and clear.";
+  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by a self-hosted local model. Always identify as RextFlex AI. The full conversation history is included in the messages above this one — you DO have access to everything the user said earlier in this chat. When asked what was said previously, look back at the actual messages and answer directly; never claim you lack memory of this conversation. Answer helpfully in the user's language. Be concise and clear.";
 
   const messages = [{ role: 'system', content: systemInstruction }, ...history];
 
