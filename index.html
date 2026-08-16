@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>RextFlex AI — Gemini</title>
+<title>RextFlex AI — Local</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -582,65 +582,28 @@ body {
     <button class="hamburger" id="hamburgerBtn"><i class="fas fa-bars"></i></button>
     <div class="model-dropdown-wrap">
       <button class="model-selector" id="modelSelectorBtn">
-        <span class="model-dot" id="modelDot"></span>
-        <span id="modelBadgeText">Gemini 3.5 Flash</span>
+        <span class="model-dot" id="modelDot" style="background:#f59e0b;"></span>
+        <span id="modelBadgeText">gemma2:9b</span>
         <i class="fas fa-chevron-down" style="font-size:10px; color:#aaa;" id="modelChevron"></i>
       </button>
       <div class="model-dropdown-menu" id="modelDropdown">
-        <div class="model-group-label">Latest Models</div>
-        <div class="model-option selected" data-model="gemini-2.5-flash-lite-preview-06-17" data-name="Gemini 3.1 Flash-Lite" data-desc="Fastest answers" data-color="#f59e0b" data-badge="New" data-new="true">
-          <span class="model-option-dot" style="background:#f59e0b;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 3.1 Flash-Lite</div>
-            <div class="model-option-desc">Fastest answers</div>
-          </div>
-          <span class="model-option-badge new-badge">New</span>
-        </div>
-        <div class="model-option" data-model="gemini-2.5-flash" data-name="Gemini 3.5 Flash" data-desc="All-around help" data-color="#10a37f" data-badge="New" data-new="true">
-          <span class="model-option-dot" style="background:#10a37f;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 3.5 Flash ✓</div>
-            <div class="model-option-desc">All-around help</div>
-          </div>
-          <span class="model-option-badge new-badge">New</span>
-        </div>
-        <div class="model-option" data-model="gemini-2.5-pro" data-name="Gemini 3.1 Pro" data-desc="Advanced maths and code" data-color="#6366f1" data-badge="" data-new="false">
-          <span class="model-option-dot" style="background:#6366f1;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 3.1 Pro</div>
-            <div class="model-option-desc">Advanced maths and code</div>
-          </div>
-        </div>
-        <hr class="model-divider">
-        <div class="model-group-label">Stable Models</div>
-        <div class="model-option" data-model="gemini-2.0-flash" data-name="Gemini 2.0 Flash" data-desc="Fast and capable" data-color="#3b82f6" data-badge="" data-new="false">
-          <span class="model-option-dot" style="background:#3b82f6;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 2.0 Flash</div>
-            <div class="model-option-desc">Fast and capable</div>
-          </div>
-        </div>
-        <div class="model-option" data-model="gemini-1.5-flash" data-name="Gemini 1.5 Flash" data-desc="Reliable & lightweight" data-color="#ec4899" data-badge="" data-new="false">
-          <span class="model-option-dot" style="background:#ec4899;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 1.5 Flash</div>
-            <div class="model-option-desc">Reliable & lightweight</div>
-          </div>
-        </div>
-        <div class="model-option" data-model="gemini-1.5-pro" data-name="Gemini 1.5 Pro" data-desc="High quality responses" data-color="#8b5cf6" data-badge="" data-new="false">
-          <span class="model-option-dot" style="background:#8b5cf6;"></span>
-          <div class="model-option-info">
-            <div class="model-option-name">Gemini 1.5 Pro</div>
-            <div class="model-option-desc">High quality responses</div>
-          </div>
-        </div>
-        <hr class="model-divider">
-        <div class="thinking-row">
+        <div class="model-group-label">Local AI Connection</div>
+        <div style="padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px;">
           <div>
-            <div class="thinking-label">🧠 Thinking Mode</div>
-            <div class="thinking-desc">Deeper reasoning (slower)</div>
+            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">API URL (Colab tunnel)</label>
+            <input type="text" id="ollamaUrlInput" value="https://loops-servers-involving-los.trycloudflare.com"
+              style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
           </div>
-          <div class="toggle-switch" id="thinkingToggle"></div>
+          <div>
+            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">Model name</label>
+            <input type="text" id="ollamaModelInput" value="gemma2:9b"
+              style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
+          </div>
+          <button id="saveOllamaSettingsBtn"
+            style="background:#111; color:#fff; border:none; border-radius:8px; padding:9px; font-size:13px; font-weight:600; cursor:pointer;">
+            Save &amp; Test Connection
+          </button>
+          <div id="ollamaStatusText" style="font-size:11.5px; color:#888;"></div>
         </div>
       </div>
     </div>
@@ -652,7 +615,7 @@ body {
     <div class="empty-state" id="emptyState">
       <div class="empty-logo">✦</div>
       <div class="empty-title">RextFlex AI</div>
-      <div class="empty-sub">Powered by Gemini 2.5 Flash • Ask anything</div>
+      <div class="empty-sub">Powered by your local AI • Ask anything</div>
     </div>
   </div>
 
@@ -750,19 +713,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ==================== GEMINI API ====================
-const GEMINI_API_KEY = "AQ.Ab8RN6JV_e4FRdBf9xYQ7Z_agpgpVintKhi3m8xhUttS1Lf6Mw"; // Replace with your AIza... key
-
-// Selected model & thinking state
-let selectedModel = "gemini-2.5-flash";
-let thinkingEnabled = false;
-
-function getGeminiURL() {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${GEMINI_API_KEY}`;
-}
-
-// Fallback chain if selected model is overloaded
-const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+// ==================== LOCAL OLLAMA API ====================
+// Update these two whenever your Colab tunnel restarts (or use the Settings panel in the UI)
+let OLLAMA_URL = "https://loops-servers-involving-los.trycloudflare.com";
+let OLLAMA_MODEL = "gemma2:9b";
 
 // ==================== STATE ====================
 let currentUser = null;
@@ -1055,7 +1009,7 @@ function displayMessage(msg) {
       });
     }
   } else {
-    if (msg.content === '💎 RextFlex thinking...') {
+    if (msg.content === '🤖 RextFlex thinking...') {
       content.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
     } else {
       content.innerHTML = formatMarkdown(msg.content || '...');
@@ -1121,11 +1075,11 @@ async function sendMessage() {
   }
 
   const loadingRef = await db.collection('chats').doc(currentChatId).collection('messages').add({
-    role: 'ai', content: '💎 RextFlex thinking...', timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    role: 'ai', content: '🤖 RextFlex thinking...', timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   try {
-    let aiReply = await callGemini(currentChatId, prompt, filesToSend);
+    let aiReply = await callOllama(currentChatId, prompt, filesToSend);
     // Inject real download links for binary files if user asked
     const binaryFiles = filesToSend.filter(f => f.type === 'binary' && f.blobUrl);
     if (binaryFiles.length > 0 && /download|link|url|bhejo|send|de do/i.test(prompt)) {
@@ -1139,14 +1093,14 @@ async function sendMessage() {
   }
 }
 
-// ==================== GEMINI API CALL ====================
-async function callGemini(chatId, userPrompt, attachedFiles) {
+// ==================== LOCAL OLLAMA API CALL ====================
+async function callOllama(chatId, userPrompt, attachedFiles) {
   const snapshot = await db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc').get();
   let history = [];
   snapshot.forEach(doc => {
     const data = doc.data();
-    if (data.role === 'user') history.push({ role: 'user', parts: [{ text: data.content }] });
-    else if (data.role === 'ai' && !data.content.includes('💎')) history.push({ role: 'model', parts: [{ text: data.content }] });
+    if (data.role === 'user') history.push({ role: 'user', content: data.content });
+    else if (data.role === 'ai' && !data.content.includes('🤖')) history.push({ role: 'assistant', content: data.content });
   });
 
   let finalUserText = userPrompt || '';
@@ -1158,56 +1112,36 @@ async function callGemini(chatId, userPrompt, attachedFiles) {
     }
   }
   if (history.length > 0 && history[history.length-1].role === 'user') {
-    history[history.length-1].parts[0].text = finalUserText;
+    history[history.length-1].content = finalUserText;
   } else {
-    history.push({ role: 'user', parts: [{ text: finalUserText }] });
+    history.push({ role: 'user', content: finalUserText });
   }
 
-  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by Google Gemini. Always identify as RextFlex AI. Answer helpfully in the user's language. Be concise and clear.";
+  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by your own self-hosted local model. Always identify as RextFlex AI. Answer helpfully in the user's language. Be concise and clear.";
 
-  // Build generationConfig — add thinking if enabled
-  const genConfig = { temperature: 0.7, maxOutputTokens: 8192 };
-  if (thinkingEnabled) {
-    genConfig.thinkingConfig = { thinkingBudget: 8192 };
+  const messages = [{ role: 'system', content: systemInstruction }, ...history];
+
+  const base = OLLAMA_URL.trim().replace(/\/+$/, '');
+  const response = await fetch(`${base}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Local server returned ${response.status}. Check the API URL / that Colab is still running.`);
   }
-
-  const requestBody = {
-    system_instruction: { parts: [{ text: systemInstruction }] },
-    contents: history,
-    generationConfig: genConfig
-  };
-
-  // Try selected model first, then fallback on overload
-  const modelsToTry = [selectedModel, ...FALLBACK_MODELS.filter(m => m !== selectedModel)];
-  for (let attempt = 0; attempt < modelsToTry.length; attempt++) {
-    const tryModel = modelsToTry[attempt];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${tryModel}:generateContent?key=${GEMINI_API_KEY}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-    const data = await response.json();
-    if (data.error) {
-      const msg = data.error.message || '';
-      const isOverload = msg.includes('high demand') || msg.includes('overload') || msg.includes('quota') || data.error.code === 429 || data.error.code === 503;
-      if (isOverload && attempt < modelsToTry.length - 1) {
-        console.warn(`Model ${tryModel} overloaded, trying fallback...`);
-        continue;
-      }
-      throw new Error(msg);
-    }
-    // Filter out thinking parts, only return text parts
-    const parts = data.candidates[0].content.parts;
-    return parts.filter(p => p.text).map(p => p.text).join('');
-  }
-  throw new Error('All models are currently busy. Please try again in a moment.');
+  const data = await response.json();
+  if (data.error) throw new Error(data.error);
+  return data.message?.content || '(empty response)';
 }
 
-// ==================== MODEL DROPDOWN JS ====================
+// ==================== SETTINGS DROPDOWN JS ====================
 const modelSelectorBtn = document.getElementById('modelSelectorBtn');
 const modelDropdown = document.getElementById('modelDropdown');
-const thinkingToggle = document.getElementById('thinkingToggle');
+const ollamaUrlInput = document.getElementById('ollamaUrlInput');
+const ollamaModelInput = document.getElementById('ollamaModelInput');
+const ollamaStatusText = document.getElementById('ollamaStatusText');
 
 modelSelectorBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -1222,29 +1156,29 @@ document.addEventListener('click', () => {
 
 modelDropdown.addEventListener('click', e => e.stopPropagation());
 
-// Model option click
-document.querySelectorAll('.model-option').forEach(opt => {
-  opt.addEventListener('click', () => {
-    const model = opt.dataset.model;
-    const name = opt.dataset.name;
-    const color = opt.dataset.color;
-    selectedModel = model;
-    // Update badge
-    document.getElementById('modelBadgeText').textContent = name;
-    document.getElementById('modelDot').style.background = color;
-    // Mark selected
-    document.querySelectorAll('.model-option').forEach(o => o.classList.remove('selected'));
-    opt.classList.add('selected');
-    // Close dropdown
-    modelDropdown.classList.remove('open');
-    document.getElementById('modelChevron').style.transform = '';
-  });
+// Save & test the Ollama connection
+document.getElementById('saveOllamaSettingsBtn').addEventListener('click', async () => {
+  OLLAMA_URL = ollamaUrlInput.value.trim();
+  OLLAMA_MODEL = ollamaModelInput.value.trim();
+  document.getElementById('modelBadgeText').textContent = OLLAMA_MODEL || 'model';
+
+  ollamaStatusText.textContent = 'Testing connection...';
+  document.getElementById('modelDot').style.background = '#f59e0b';
+  try {
+    const base = OLLAMA_URL.replace(/\/+$/, '');
+    const res = await fetch(`${base}/api/tags`);
+    if (!res.ok) throw new Error('bad response (' + res.status + ')');
+    ollamaStatusText.textContent = '✅ Connected';
+    document.getElementById('modelDot').style.background = '#10a37f';
+  } catch (err) {
+    ollamaStatusText.textContent = '❌ ' + err.message;
+    document.getElementById('modelDot').style.background = '#e53e3e';
+  }
 });
 
-// Thinking toggle
-thinkingToggle.addEventListener('click', () => {
-  thinkingEnabled = !thinkingEnabled;
-  thinkingToggle.classList.toggle('on', thinkingEnabled);
+// Test the default connection once on load
+window.addEventListener('load', () => {
+  document.getElementById('saveOllamaSettingsBtn').click();
 });
 
 </script>
