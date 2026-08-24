@@ -583,20 +583,20 @@ body {
     <div class="model-dropdown-wrap">
       <button class="model-selector" id="modelSelectorBtn">
         <span class="model-dot" id="modelDot" style="background:#f59e0b;"></span>
-        <span id="modelBadgeText">gemma2:9b</span>
+        <span id="modelBadgeText">my-ollama-api</span>
         <i class="fas fa-chevron-down" style="font-size:10px; color:#aaa;" id="modelChevron"></i>
       </button>
       <div class="model-dropdown-menu" id="modelDropdown">
-        <div class="model-group-label">Local AI Connection</div>
+        <div class="model-group-label">Hugging Face Space Connection</div>
         <div style="padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px;">
           <div>
-            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">API URL (Colab tunnel)</label>
-            <input type="text" id="ollamaUrlInput" value="https://loops-servers-involving-los.trycloudflare.com"
+            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">Space ID (username/space-name)</label>
+            <input type="text" id="spaceIdInput" value="rajveer28677/my-ollama-api"
               style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
           </div>
           <div>
-            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">Model name</label>
-            <input type="text" id="ollamaModelInput" value="gemma2:9b"
+            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">API endpoint name</label>
+            <input type="text" id="apiNameInput" value="/chat"
               style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
           </div>
           <button id="saveOllamaSettingsBtn"
@@ -713,10 +713,16 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ==================== LOCAL OLLAMA API ====================
-// Update these two whenever your Colab tunnel restarts (or use the Settings panel in the UI)
-let OLLAMA_URL = "https://loops-servers-involving-los.trycloudflare.com";
-let OLLAMA_MODEL = "gemma2:9b";
+// ==================== HUGGING FACE SPACE CONNECTION ====================
+// Change these if you rename/duplicate the Space, or use the Settings panel in the UI.
+let SPACE_ID = "rajveer28677/my-ollama-api";   // your Space's username/space-name
+let API_NAME = "/chat";                         // from your Space's "Use via API" page
+
+// Loads the Gradio JS client on demand (works fine from a plain <script> tag via dynamic import).
+async function getGradioClient() {
+  const { Client } = await import("https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js");
+  return Client;
+}
 
 // ==================== STATE ====================
 let currentUser = null;
@@ -1079,7 +1085,7 @@ async function sendMessage() {
   });
 
   try {
-    let aiReply = await callOllama(currentChatId, prompt, filesToSend);
+    let aiReply = await callSpace(currentChatId, prompt, filesToSend);
     // Inject real download links for binary files if user asked
     const binaryFiles = filesToSend.filter(f => f.type === 'binary' && f.blobUrl);
     if (binaryFiles.length > 0 && /download|link|url|bhejo|send|de do/i.test(prompt)) {
@@ -1093,8 +1099,8 @@ async function sendMessage() {
   }
 }
 
-// ==================== LOCAL OLLAMA API CALL ====================
-async function callOllama(chatId, userPrompt, attachedFiles) {
+// ==================== HUGGING FACE SPACE API CALL ====================
+async function callSpace(chatId, userPrompt, attachedFiles) {
   const snapshot = await db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc').get();
   let history = [];
   snapshot.forEach(doc => {
@@ -1111,36 +1117,37 @@ async function callOllama(chatId, userPrompt, attachedFiles) {
       finalUserText += `\n\n[Binary/Zip file: ${f.name} (${formatSize(f.size)}). Cannot read contents directly. If user asks for a download link, say the file is available as a local blob URL and guide them.]`;
     }
   }
-  if (history.length > 0 && history[history.length-1].role === 'user') {
-    history[history.length-1].content = finalUserText;
-  } else {
-    history.push({ role: 'user', content: finalUserText });
+  // The last entry is the current user turn we just wrote to Firestore -- the Space's
+  // /chat endpoint wants that as the separate "message" argument, not inside "history".
+  if (history.length > 0 && history[history.length - 1].role === 'user') {
+    history.pop();
   }
 
-  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by a self-hosted local model. Always identify as RextFlex AI. The full conversation history is included in the messages above this one — you DO have access to everything the user said earlier in this chat. When asked what was said previously, look back at the actual messages and answer directly; never claim you lack memory of this conversation. Answer helpfully in the user's language. Be concise and clear.";
+  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by an open-source model hosted on Hugging Face. Always identify as RextFlex AI. The full conversation history is included in the messages above this one — you DO have access to everything the user said earlier in this chat. When asked what was said previously, look back at the actual messages and answer directly; never claim you lack memory of this conversation. Answer helpfully in the user's language. Be concise and clear.";
 
-  const messages = [{ role: 'system', content: systemInstruction }, ...history];
-
-  const base = OLLAMA_URL.trim().replace(/\/+$/, '');
-  const response = await fetch(`${base}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Local server returned ${response.status}. Check the API URL / that Colab is still running.`);
+  try {
+    const Client = await getGradioClient();
+    const client = await Client.connect(SPACE_ID);
+    const result = await client.predict(API_NAME, {
+      message: finalUserText,
+      history: history,
+      system_prompt: systemInstruction,
+      max_new_tokens: 512,
+      temperature: 0.3,
+    });
+    const reply = Array.isArray(result?.data) ? result.data[0] : result?.data;
+    if (!reply) throw new Error('empty response');
+    return reply;
+  } catch (err) {
+    throw new Error(`Space call failed: ${err.message}. Check the Space ID / endpoint name in Settings, and that the Space is "Running" (first request after it's been asleep can take a minute to wake up + reload the model).`);
   }
-  const data = await response.json();
-  if (data.error) throw new Error(data.error);
-  return data.message?.content || '(empty response)';
 }
 
 // ==================== SETTINGS DROPDOWN JS ====================
 const modelSelectorBtn = document.getElementById('modelSelectorBtn');
 const modelDropdown = document.getElementById('modelDropdown');
-const ollamaUrlInput = document.getElementById('ollamaUrlInput');
-const ollamaModelInput = document.getElementById('ollamaModelInput');
+const spaceIdInput = document.getElementById('spaceIdInput');
+const apiNameInput = document.getElementById('apiNameInput');
 const ollamaStatusText = document.getElementById('ollamaStatusText');
 
 modelSelectorBtn.addEventListener('click', (e) => {
@@ -1156,18 +1163,17 @@ document.addEventListener('click', () => {
 
 modelDropdown.addEventListener('click', e => e.stopPropagation());
 
-// Save & test the Ollama connection
+// Save & test the HF Space connection
 document.getElementById('saveOllamaSettingsBtn').addEventListener('click', async () => {
-  OLLAMA_URL = ollamaUrlInput.value.trim();
-  OLLAMA_MODEL = ollamaModelInput.value.trim();
-  document.getElementById('modelBadgeText').textContent = OLLAMA_MODEL || 'model';
+  SPACE_ID = spaceIdInput.value.trim();
+  API_NAME = apiNameInput.value.trim() || '/chat';
+  document.getElementById('modelBadgeText').textContent = SPACE_ID.split('/')[1] || SPACE_ID || 'space';
 
-  ollamaStatusText.textContent = 'Testing connection...';
+  ollamaStatusText.textContent = 'Testing connection... (can take a minute if the Space was asleep)';
   document.getElementById('modelDot').style.background = '#f59e0b';
   try {
-    const base = OLLAMA_URL.replace(/\/+$/, '');
-    const res = await fetch(`${base}/api/tags`);
-    if (!res.ok) throw new Error('bad response (' + res.status + ')');
+    const Client = await getGradioClient();
+    await Client.connect(SPACE_ID);
     ollamaStatusText.textContent = '✅ Connected';
     document.getElementById('modelDot').style.background = '#10a37f';
   } catch (err) {
