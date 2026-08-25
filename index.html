@@ -3,604 +3,849 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>RextFlex AI — Local</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<title>RextFlex AI</title>
+<meta name="theme-color" content="#0c0c10">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',system-ui; }
+/* ============================================================
+   1. RESET
+   ============================================================ */
+* { margin:0; padding:0; box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body { font-family:'Inter',system-ui,-apple-system,sans-serif; }
+button { font-family:inherit; }
+textarea { font-family:inherit; }
+a { color:inherit; }
+::selection { background:rgba(124,108,255,0.35); }
 
-/* ===== BODY & LAYOUT ===== */
-body {
-  background: #ffffff;
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-  color: #111111;
+/* ============================================================
+   2. VARIABLES
+   ============================================================ */
+:root {
+  --bg-0:#0c0c10;          /* app background */
+  --bg-1:#141419;          /* sidebar / panels */
+  --bg-2:#1b1b22;          /* cards, composer, hover surfaces */
+  --bg-3:#232430;          /* elevated / active surfaces */
+  --border:#2a2b35;
+  --border-soft:#212229;
+  --text-0:#f1f0ee;        /* primary text, warm off-white */
+  --text-1:#a8a8b3;        /* secondary text */
+  --text-2:#6c6c78;        /* muted / placeholder */
+  --accent:#7c6cff;        /* signature indigo-violet */
+  --accent-hover:#8f81ff;
+  --accent-dim:rgba(124,108,255,0.14);
+  --accent-grad:linear-gradient(135deg,#6d5ef8,#9d5cf5);
+  --good:#3ecf8e;
+  --warn:#f5a742;
+  --bad:#f56565;
+  --radius-sm:8px;
+  --radius-md:14px;
+  --radius-lg:20px;
+  --font-display:'Space Grotesk',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',monospace;
+  --shadow-1:0 1px 2px rgba(0,0,0,0.3);
+  --shadow-2:0 8px 28px rgba(0,0,0,0.35);
 }
 
-/* ===== SIDEBAR ===== */
+/* ============================================================
+   3. LAYOUT
+   ============================================================ */
+body {
+  background:var(--bg-0);
+  display:flex;
+  height:100vh;
+  height:100dvh;
+  overflow:hidden;
+  color:var(--text-0);
+}
+.main {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  height:100dvh;
+  overflow:hidden;
+  background:var(--bg-0);
+  min-width:0;
+}
+
+/* ============================================================
+   4. SIDEBAR
+   ============================================================ */
 .sidebar {
-  width: 260px;
-  background: #f7f7f8;
-  border-right: 1px solid #e5e5e5;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  transition: transform 0.3s ease;
-  flex-shrink: 0;
+  width:272px;
+  background:var(--bg-1);
+  border-right:1px solid var(--border-soft);
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  height:100dvh;
+  transition:transform 0.28s cubic-bezier(.4,0,.2,1), width 0.2s ease;
+  flex-shrink:0;
 }
 .sidebar-top {
-  padding: 16px 12px 10px;
-  border-bottom: 1px solid #e5e5e5;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  padding:18px 14px 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
 .sidebar-logo {
-  font-size: 15px;
-  font-weight: 700;
-  color: #111;
-  flex: 1;
+  font-family:var(--font-display);
+  font-size:16px;
+  font-weight:600;
+  color:var(--text-0);
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  letter-spacing:-0.01em;
+}
+.sidebar-logo .logo-mark {
+  width:22px;height:22px;border-radius:7px;
+  background:var(--accent-grad);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:#fff;flex-shrink:0;
 }
 .new-chat-btn {
-  background: none;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  color: #555;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: 0.2s;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  width:32px; height:32px;
+  color:var(--text-1);
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:0.15s;
+  font-size:13px;
 }
-.new-chat-btn:hover { background: #ececec; }
+.new-chat-btn:hover { background:var(--bg-3); color:var(--text-0); border-color:#373844; }
+
+.sidebar-search {
+  margin:2px 14px 10px;
+  position:relative;
+}
+.sidebar-search input {
+  width:100%;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:8px 10px 8px 32px;
+  font-size:12.5px;
+  color:var(--text-0);
+  outline:none;
+  transition:0.15s;
+}
+.sidebar-search input:focus { border-color:var(--accent); background:var(--bg-3); }
+.sidebar-search input::placeholder { color:var(--text-2); }
+.sidebar-search i {
+  position:absolute; left:11px; top:50%; transform:translateY(-50%);
+  font-size:11px; color:var(--text-2); pointer-events:none;
+}
+
 .chats-label {
-  padding: 14px 16px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  padding:10px 18px 6px;
+  font-size:10.5px;
+  font-weight:600;
+  color:var(--text-2);
+  text-transform:uppercase;
+  letter-spacing:0.7px;
 }
 .chats-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 8px 12px;
+  flex:1;
+  overflow-y:auto;
+  padding:2px 10px 12px;
 }
-.chats-list::-webkit-scrollbar { width: 4px; }
-.chats-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+.chats-list::-webkit-scrollbar { width:5px; }
+.chats-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 .chat-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.15s;
-  margin-bottom: 2px;
-  color: #111;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:9px 10px;
+  border-radius:10px;
+  cursor:pointer;
+  transition:background 0.15s;
+  margin-bottom:1px;
+  color:var(--text-0);
+  gap:6px;
 }
-.chat-item:hover, .chat-item.active { background: #ebebeb; }
+.chat-item:hover { background:var(--bg-2); }
+.chat-item.active { background:var(--bg-3); }
+.chat-item-body { flex:1; min-width:0; }
 .chat-item-title {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  color: #222;
+  font-size:13px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:var(--text-0);
+  display:block;
+}
+.chat-item-time {
+  font-size:10.5px;
+  color:var(--text-2);
+  margin-top:1px;
 }
 .chat-delete {
-  background: none;
-  border: none;
-  color: #aaa;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  opacity: 0;
-  transition: 0.15s;
+  background:none;
+  border:none;
+  color:var(--text-2);
+  cursor:pointer;
+  font-size:12px;
+  padding:5px 6px;
+  border-radius:6px;
+  opacity:0;
+  transition:0.15s;
+  flex-shrink:0;
 }
-.chat-item:hover .chat-delete { opacity: 1; }
-.chat-delete:hover { color: #e53e3e; background: #fee2e2; }
+.chat-item:hover .chat-delete { opacity:1; }
+.chat-delete:hover { color:var(--bad); background:rgba(245,101,101,0.12); }
+
+.sidebar-tools {
+  padding:6px 10px;
+  border-top:1px solid var(--border-soft);
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.sidebar-tool-btn {
+  display:flex; align-items:center; gap:10px;
+  background:none; border:none; width:100%;
+  padding:9px 10px; border-radius:10px;
+  color:var(--text-1); font-size:13px; cursor:pointer;
+  transition:0.15s; text-align:left;
+}
+.sidebar-tool-btn:hover { background:var(--bg-2); color:var(--text-0); }
+.sidebar-tool-btn i { width:16px; text-align:center; font-size:13px; color:var(--text-2); }
+.sidebar-tool-btn:hover i { color:var(--accent); }
+.sidebar-tool-badge {
+  margin-left:auto; background:var(--accent); color:#fff;
+  font-size:10px; font-weight:700; border-radius:10px;
+  min-width:16px; height:16px; padding:0 4px;
+  display:none; align-items:center; justify-content:center;
+}
+.sidebar-tool-badge.show { display:flex; }
+
 .sidebar-footer {
-  padding: 12px;
-  border-top: 1px solid #e5e5e5;
+  padding:10px;
+  border-top:1px solid var(--border-soft);
 }
 .profile-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.15s;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px;
+  border-radius:10px;
+  cursor:pointer;
+  transition:0.15s;
 }
-.profile-row:hover { background: #ebebeb; }
+.profile-row:hover { background:var(--bg-2); }
 .profile-avatar {
-  width: 32px; height: 32px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 14px; font-weight: 600;
-  flex-shrink: 0;
+  width:32px; height:32px;
+  background:var(--accent-grad);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:white; font-size:13px; font-weight:600;
+  flex-shrink:0;
 }
-.profile-name { font-size: 13px; font-weight: 500; color: #111; }
-.profile-email-small { font-size: 11px; color: #888; }
+.profile-name { font-size:13px; font-weight:500; color:var(--text-0); }
+.profile-email-small { font-size:11px; color:var(--text-2); }
 
-/* ===== MAIN CHAT AREA ===== */
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-  background: #ffffff;
-}
+/* Collapsed sidebar (desktop) */
+.sidebar.collapsed { width:0; border-right-color:transparent; overflow:hidden; }
 
-/* ===== TOP BAR ===== */
+/* ============================================================
+   5. HEADER / TOPBAR
+   ============================================================ */
 .topbar {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid #e5e5e5;
-  background: #ffffff;
-  gap: 12px;
-  min-height: 56px;
+  display:flex;
+  align-items:center;
+  padding:10px 18px;
+  border-bottom:1px solid var(--border-soft);
+  background:var(--bg-0);
+  gap:10px;
+  min-height:56px;
+  flex-shrink:0;
 }
 .hamburger {
-  display: none;
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: #555;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
+  display:none;
+  background:none;
+  border:none;
+  font-size:16px;
+  color:var(--text-1);
+  cursor:pointer;
+  padding:7px 9px;
+  border-radius:8px;
 }
-.hamburger:hover { background: #f0f0f0; }
-.model-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 5px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #111;
-  cursor: pointer;
-  transition: 0.15s;
+.hamburger:hover { background:var(--bg-2); }
+.desktop-sidebar-toggle {
+  background:none; border:none; color:var(--text-1);
+  cursor:pointer; padding:7px 9px; border-radius:8px; font-size:14px;
 }
-.model-selector:hover { background: #f5f5f5; }
-.model-dot { width: 8px; height: 8px; border-radius: 50%; background: #10a37f; }
-.topbar-spacer { flex: 1; }
+.desktop-sidebar-toggle:hover { background:var(--bg-2); color:var(--text-0); }
+.topbar-mobile-title {
+  display:none;
+  font-family:var(--font-display);
+  font-weight:600;
+  font-size:15px;
+}
+.topbar-mobile-new {
+  display:none;
+  background:none; border:none; color:var(--text-1);
+  font-size:16px; cursor:pointer; padding:7px 9px; border-radius:8px;
+}
 
-/* ===== MODEL DROPDOWN ===== */
-.model-dropdown-wrap { position: relative; }
+.model-selector {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:6px 12px 6px 10px;
+  font-size:13px;
+  font-weight:500;
+  color:var(--text-0);
+  cursor:pointer;
+  transition:0.15s;
+}
+.model-selector:hover { background:var(--bg-3); border-color:#37384a; }
+.model-dot { width:7px; height:7px; border-radius:50%; background:var(--good); flex-shrink:0; }
+.topbar-spacer { flex:1; }
+
+/* ============================================================
+   6. MODEL / SETTINGS PANEL (dropdown on desktop, bottom sheet on mobile)
+   ============================================================ */
+.model-dropdown-wrap { position:relative; }
 .model-dropdown-menu {
-  display: none;
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  background: #fff;
-  border: 1px solid #e5e5e5;
-  border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.13);
-  min-width: 260px;
-  z-index: 999;
-  padding: 8px;
-  animation: dropIn 0.18s ease;
+  display:none;
+  position:absolute;
+  top:calc(100% + 10px);
+  left:0;
+  background:var(--bg-1);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:var(--shadow-2);
+  width:300px;
+  max-height:min(560px, 75vh);
+  overflow-y:auto;
+  z-index:999;
+  padding:10px;
+  animation:dropIn 0.16s ease;
 }
 @keyframes dropIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
-.model-dropdown-menu.open { display: block; }
+.model-dropdown-menu.open { display:block; }
+
+.provider-tabs {
+  display:flex; gap:4px; background:var(--bg-2);
+  border-radius:10px; padding:3px; margin-bottom:10px;
+}
+.provider-tab {
+  flex:1; text-align:center; padding:7px 6px; border-radius:8px;
+  font-size:12px; font-weight:600; color:var(--text-1); cursor:pointer;
+  border:none; background:none; transition:0.15s;
+}
+.provider-tab.active { background:var(--bg-3); color:var(--text-0); }
+.provider-pane { display:none; }
+.provider-pane.active { display:block; }
+
 .model-group-label {
-  font-size: 10px; font-weight: 700; color: #aaa;
-  text-transform: uppercase; letter-spacing: 0.8px;
-  padding: 6px 10px 4px;
+  font-size:10px; font-weight:700; color:var(--text-2);
+  text-transform:uppercase; letter-spacing:0.8px;
+  padding:4px 4px 8px;
 }
 .model-option {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 10px;
-  cursor: pointer; transition: 0.15s;
+  display:flex; align-items:center; gap:10px;
+  padding:9px 10px; border-radius:10px;
+  cursor:pointer; transition:0.15s;
+  border:1px solid transparent;
 }
-.model-option:hover { background: #f5f5f5; }
-.model-option.selected { background: #f0fdf4; }
-.model-option-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.model-option-info { flex: 1; }
-.model-option-name { font-size: 14px; font-weight: 600; color: #111; }
-.model-option-desc { font-size: 11px; color: #888; margin-top: 1px; }
+.model-option:hover { background:var(--bg-2); }
+.model-option.selected { background:var(--accent-dim); border-color:rgba(124,108,255,0.35); }
+.model-option-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--text-2); }
+.model-option.selected .model-option-dot { background:var(--accent); }
+.model-option-info { flex:1; min-width:0; }
+.model-option-name { font-size:13px; font-weight:600; color:var(--text-0); }
+.model-option-desc { font-size:11px; color:var(--text-2); margin-top:1px; }
 .model-option-badge {
-  font-size: 10px; font-weight: 600; padding: 2px 8px;
-  border-radius: 20px; background: #f0f0f0; color: #555;
+  font-size:9.5px; font-weight:700; padding:2px 7px;
+  border-radius:20px; background:var(--bg-3); color:var(--text-1);
+  flex-shrink:0;
 }
-.model-option-badge.new-badge { background: #f0fdf4; color: #16a34a; }
-.model-divider { border: none; border-top: 1px solid #f0f0f0; margin: 6px 4px; }
-/* Thinking toggle */
-.thinking-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; border-radius: 10px;
-}
-.thinking-label { font-size: 14px; font-weight: 600; color: #111; }
-.thinking-desc { font-size: 11px; color: #888; margin-top: 1px; }
-.toggle-switch {
-  position: relative; width: 42px; height: 24px;
-  background: #e0e0e0; border-radius: 12px; cursor: pointer;
-  transition: background 0.2s; flex-shrink: 0;
-}
-.toggle-switch.on { background: #10a37f; }
-.toggle-switch::after {
-  content: ''; position: absolute;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: white; top: 3px; left: 3px;
-  transition: transform 0.2s;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-}
-.toggle-switch.on::after { transform: translateX(18px); }
+.model-option-badge.new-badge { background:rgba(62,207,142,0.14); color:var(--good); }
+.model-divider { border:none; border-top:1px solid var(--border-soft); margin:8px 2px; }
 
-/* ===== CHAT MESSAGES ===== */
-.chat-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  background: #fff;
+.settings-field-label { font-size:11px; font-weight:600; color:var(--text-2); display:block; margin-bottom:4px; }
+.settings-input {
+  width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:9px;
+  font-size:12.5px; font-family:var(--font-mono); color:var(--text-0); background:var(--bg-2);
+  outline:none; transition:0.15s;
 }
-.chat-container::-webkit-scrollbar { width: 6px; }
-.chat-container::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 6px; }
+.settings-input:focus { border-color:var(--accent); }
+.settings-save-btn {
+  background:var(--accent-grad); color:#fff; border:none; border-radius:9px;
+  padding:9px; font-size:13px; font-weight:600; cursor:pointer; width:100%;
+  transition:filter 0.15s;
+}
+.settings-save-btn:hover { filter:brightness(1.08); }
+.settings-status { font-size:11.5px; color:var(--text-2); margin-top:8px; min-height:14px; }
+
+/* ============================================================
+   7. CHAT / MESSAGES
+   ============================================================ */
+.chat-container {
+  flex:1;
+  overflow-y:auto;
+  padding:20px 0 8px;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  background:var(--bg-0);
+}
+.chat-container::-webkit-scrollbar { width:6px; }
+.chat-container::-webkit-scrollbar-thumb { background:var(--border); border-radius:6px; }
 
 .message-row {
-  display: flex;
-  padding: 12px 20%;
-  gap: 14px;
-  animation: msgIn 0.25s ease;
+  display:flex;
+  padding:10px max(5%, calc((100% - 720px) / 2));
+  gap:14px;
+  animation:msgIn 0.25s ease;
 }
-@keyframes msgIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes msgIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
-.message-row.user { background: #fff; justify-content: flex-end; }
-.message-row.ai { background: #f9f9f9; justify-content: flex-start; }
+.message-row.user { justify-content:flex-end; }
+.message-row.ai { justify-content:flex-start; align-items:flex-start; }
 
 .msg-avatar {
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700;
-  flex-shrink: 0;
-  margin-top: 2px;
+  width:26px; height:26px;
+  border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700;
+  flex-shrink:0;
+  margin-top:2px;
 }
-.msg-avatar.user-av { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; }
-.msg-avatar.ai-av { background: #10a37f; color: white; font-size: 11px; }
+.msg-avatar.user-av { background:var(--bg-3); color:var(--text-0); border-radius:50%; }
+.msg-avatar.ai-av { background:var(--accent-grad); color:#fff; font-size:11px; }
 
+.msg-block { flex:1; min-width:0; max-width:100%; }
+.msg-name {
+  font-size:12px; font-weight:600; color:var(--text-1);
+  margin-bottom:4px; font-family:var(--font-display);
+}
 .msg-content {
-  flex: 1;
-  max-width: 680px;
-  font-size: 15px;
-  line-height: 1.65;
-  color: #111111;
+  font-size:15px;
+  line-height:1.65;
+  color:var(--text-0);
+  max-width:680px;
 }
 .msg-content.user-text {
-  background: #f0f0f0;
-  border-radius: 18px 18px 4px 18px;
-  padding: 10px 16px;
-  display: inline-block;
-  max-width: 75%;
-  color: #111;
+  background:var(--bg-2);
+  border:1px solid var(--border-soft);
+  border-radius:18px 18px 4px 18px;
+  padding:10px 16px;
+  display:inline-block;
+  max-width:75%;
+  color:var(--text-0);
 }
-.msg-content.ai-text { color: #111111; }
-.msg-content.ai-text p { margin-bottom: 10px; color: #111; }
-.msg-content.ai-text pre {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 16px;
-  border-radius: 10px;
-  overflow-x: auto;
-  font-size: 13px;
-  margin: 10px 0;
+.msg-content.ai-text { color:var(--text-0); }
+.msg-content.ai-text p { margin-bottom:10px; }
+.msg-content.ai-text ul, .msg-content.ai-text ol { margin:0 0 10px 20px; }
+.msg-content.ai-text li { margin-bottom:4px; }
+.msg-content.ai-text h1, .msg-content.ai-text h2, .msg-content.ai-text h3 {
+  font-family:var(--font-display); margin:14px 0 8px; color:var(--text-0);
 }
 .msg-content.ai-text code {
-  background: #f0f0f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: #333;
+  background:var(--bg-2);
+  border:1px solid var(--border-soft);
+  padding:2px 6px;
+  border-radius:5px;
+  font-size:13px;
+  font-family:var(--font-mono);
+  color:#c9b7ff;
 }
+
+/* Code block: styled like a small editor pane -- the signature detail */
+.code-block { margin:12px 0; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:#0e0e13; }
+.code-block-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px; background:#15151c; border-bottom:1px solid var(--border);
+}
+.code-block-lang { font-size:11px; font-family:var(--font-mono); color:var(--text-1); text-transform:lowercase; letter-spacing:0.3px; }
+.code-copy-btn {
+  display:flex; align-items:center; gap:5px;
+  background:none; border:1px solid var(--border); color:var(--text-1);
+  font-size:11px; padding:4px 9px; border-radius:7px; cursor:pointer; transition:0.15s;
+}
+.code-copy-btn:hover { background:var(--bg-3); color:var(--text-0); }
+.code-copy-btn.copied { color:var(--good); border-color:rgba(62,207,142,0.4); }
+.code-block pre {
+  margin:0; padding:14px 16px; overflow-x:auto;
+  font-size:13px; font-family:var(--font-mono); line-height:1.55; color:#d8d8de;
+}
+.code-block pre code { background:none; border:none; padding:0; color:inherit; font-size:inherit; }
+
 .attach-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: #e8e8e8;
-  border-radius: 20px;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: #444;
-  margin-top: 6px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  background:var(--bg-3);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:3px 10px;
+  font-size:12px;
+  color:var(--text-1);
+  margin-top:6px;
 }
 
 /* TYPING INDICATOR */
+.typing-dots { display:flex; gap:4px; padding:4px 0; }
 .typing-dots span {
-  display: inline-block;
-  width: 7px; height: 7px;
-  background: #10a37f;
-  border-radius: 50%;
-  margin: 0 2px;
-  animation: bounce 1.2s infinite;
-  opacity: 0.6;
+  display:inline-block;
+  width:6px; height:6px;
+  background:var(--accent);
+  border-radius:50%;
+  animation:bounce 1.2s infinite;
+  opacity:0.5;
 }
-.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+.typing-dots span:nth-child(2) { animation-delay:0.15s; }
+.typing-dots span:nth-child(3) { animation-delay:0.3s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0); opacity:0.5;} 30%{transform:translateY(-5px); opacity:1;} }
 
-/* ===== EMPTY STATE ===== */
+/* ============================================================
+   8. EMPTY / WELCOME STATE
+   ============================================================ */
 .empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  text-align: center;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:40px 20px;
+  text-align:center;
 }
-.empty-logo { font-size: 42px; margin-bottom: 16px; }
-.empty-title { font-size: 28px; font-weight: 600; color: #111; margin-bottom: 8px; }
-.empty-sub { font-size: 15px; color: #888; }
+.empty-logo {
+  width:52px; height:52px; border-radius:16px;
+  background:var(--accent-grad);
+  display:flex; align-items:center; justify-content:center;
+  font-size:24px; color:#fff; margin-bottom:20px;
+}
+.empty-title { font-family:var(--font-display); font-size:26px; font-weight:600; color:var(--text-0); margin-bottom:6px; letter-spacing:-0.01em; }
+.empty-sub { font-size:14px; color:var(--text-2); margin-bottom:32px; }
+.suggestion-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  width:100%; max-width:560px;
+}
+.suggestion-card {
+  text-align:left;
+  background:var(--bg-1); border:1px solid var(--border);
+  border-radius:14px; padding:14px 16px; cursor:pointer;
+  transition:0.15s;
+}
+.suggestion-card:hover { background:var(--bg-2); border-color:#37384a; transform:translateY(-1px); }
+.suggestion-card i { color:var(--accent); font-size:14px; margin-bottom:8px; display:block; }
+.suggestion-card-title { font-size:13.5px; font-weight:600; color:var(--text-0); margin-bottom:2px; }
+.suggestion-card-sub { font-size:11.5px; color:var(--text-2); }
 
-/* ===== FILE PREVIEW CHIPS ===== */
+/* ============================================================
+   9. COMPOSER
+   ============================================================ */
 .file-preview-strip {
-  display: none;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 20%;
-  background: #fff;
-  border-top: 1px solid #eee;
+  display:none;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:8px max(5%, calc((100% - 720px) / 2)) 0;
+  background:var(--bg-0);
 }
 .file-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f0f0f0;
-  border: 1px solid #e0e0e0;
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 12px;
-  color: #333;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:5px 12px;
+  font-size:12px;
+  color:var(--text-1);
 }
 .chip-remove {
-  background: none; border: none;
-  color: #999; cursor: pointer;
-  font-size: 13px; line-height: 1;
-  padding: 0 2px;
+  background:none; border:none;
+  color:var(--text-2); cursor:pointer;
+  font-size:13px; line-height:1;
+  padding:0 2px;
 }
-.chip-remove:hover { color: #e53e3e; }
+.chip-remove:hover { color:var(--bad); }
 
-/* ===== INPUT AREA with 3D Keyboard Style ===== */
 .input-area-wrapper {
-  padding: 12px 20%;
-  background: #fff;
-  border-top: 1px solid #e5e5e5;
+  padding:12px max(5%, calc((100% - 720px) / 2)) 16px;
+  background:var(--bg-0);
 }
 .input-box {
-  display: flex;
-  align-items: flex-end;
-  background: #fff;
-  border: 1.5px solid #d9d9d9;
-  border-radius: 16px;
-  padding: 8px 12px;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  display:flex;
+  align-items:flex-end;
+  background:var(--bg-1);
+  border:1.5px solid var(--border);
+  border-radius:22px;
+  padding:8px 8px 8px 14px;
+  gap:8px;
+  box-shadow:var(--shadow-1);
+  transition:border-color 0.2s, box-shadow 0.2s;
 }
 .input-box:focus-within {
-  border-color: #111;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim);
 }
 .input-textarea {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 15px;
-  color: #111;
-  resize: none;
-  max-height: 160px;
-  min-height: 24px;
-  line-height: 1.5;
-  padding: 4px 0;
-  font-family: 'Inter', system-ui;
+  flex:1;
+  background:none;
+  border:none;
+  outline:none;
+  font-size:15px;
+  color:var(--text-0);
+  resize:none;
+  max-height:160px;
+  min-height:24px;
+  line-height:1.5;
+  padding:6px 0;
+  font-family:'Inter', system-ui;
 }
-.input-textarea::placeholder { color: #aaa; }
+.input-textarea::placeholder { color:var(--text-2); }
 
-/* 3D KEYBOARD BUTTONS */
 .kb-btn {
-  background: #f0f0f0;
-  border: 1px solid #c8c8c8;
-  border-bottom: 3px solid #b0b0b0;
-  border-radius: 8px;
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
-  color: #444;
-  cursor: pointer;
-  transition: all 0.08s;
-  flex-shrink: 0;
-  user-select: none;
+  background:var(--bg-2);
+  border:1px solid var(--border);
+  border-radius:50%;
+  width:34px; height:34px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px;
+  color:var(--text-1);
+  cursor:pointer;
+  transition:all 0.12s;
+  flex-shrink:0;
+  user-select:none;
 }
-.kb-btn:hover {
-  background: #e8e8e8;
-  border-color: #bbb;
-  border-bottom-color: #999;
-}
-.kb-btn:active {
-  border-bottom-width: 1px;
-  transform: translateY(2px);
-  background: #e0e0e0;
-}
+.kb-btn:hover { background:var(--bg-3); color:var(--text-0); }
+.kb-btn:active { transform:scale(0.92); }
 .kb-btn.send-btn {
-  background: #111;
-  border-color: #000;
-  border-bottom-color: #000;
-  color: #fff;
-  width: 36px; height: 36px;
+  background:var(--accent-grad);
+  border-color:transparent;
+  color:#fff;
 }
-.kb-btn.send-btn:hover { background: #333; }
-.kb-btn.send-btn:disabled { background: #e0e0e0; border-color: #ccc; border-bottom-color: #bbb; color: #aaa; cursor: not-allowed; }
+.kb-btn.send-btn:hover { filter:brightness(1.1); }
+.kb-btn.send-btn:disabled { background:var(--bg-2); color:var(--text-2); cursor:not-allowed; filter:none; }
 .input-footer-note {
-  text-align: center;
-  font-size: 11px;
-  color: #bbb;
-  margin-top: 8px;
+  text-align:center;
+  font-size:11px;
+  color:var(--text-2);
+  margin-top:9px;
 }
 
-/* ===== MODALS ===== */
+.attach-menu {
+  display:none; position:absolute; bottom:calc(100% + 8px); left:0;
+  background:var(--bg-1); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow-2); padding:6px; min-width:170px; z-index:50;
+}
+.attach-menu.open { display:block; animation:dropIn 0.15s ease; }
+.attach-menu-item {
+  display:flex; align-items:center; gap:9px; padding:8px 10px;
+  border-radius:8px; font-size:13px; color:var(--text-0); cursor:pointer; transition:0.15s;
+}
+.attach-menu-item:hover { background:var(--bg-2); }
+.attach-wrap { position:relative; }
+
+/* ============================================================
+   10. MODALS
+   ============================================================ */
 .modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(6px);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
+  position:fixed; inset:0;
+  background:rgba(6,6,9,0.65);
+  backdrop-filter:blur(6px);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
 }
-.modal-overlay.show { display: flex; }
+.modal-overlay.show { display:flex; }
 .modal-card {
-  background: #fff;
-  border-radius: 20px;
-  padding: 36px 32px;
-  width: 90%;
-  max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-  color: #111;
+  background:var(--bg-1);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:32px 28px;
+  width:90%;
+  max-width:380px;
+  box-shadow:var(--shadow-2);
+  color:var(--text-0);
 }
-.modal-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 20px; text-align: center; color: #111; }
+.modal-card h2 { font-family:var(--font-display); font-size:21px; font-weight:600; margin-bottom:20px; text-align:center; color:var(--text-0); }
 .field {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1.5px solid #e0e0e0;
-  border-radius: 10px;
-  font-size: 14px;
-  color: #111;
-  background: #fafafa;
-  outline: none;
-  margin-bottom: 10px;
-  transition: 0.2s;
+  width:100%;
+  padding:11px 14px;
+  border:1.5px solid var(--border);
+  border-radius:11px;
+  font-size:14px;
+  color:var(--text-0);
+  background:var(--bg-2);
+  outline:none;
+  margin-bottom:10px;
+  transition:0.2s;
 }
-.field:focus { border-color: #111; background: #fff; }
+.field::placeholder { color:var(--text-2); }
+.field:focus { border-color:var(--accent); }
 .auth-btn {
-  width: 100%;
-  padding: 13px;
-  border-radius: 10px;
-  border: none;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 4px;
-  margin-bottom: 8px;
-  transition: 0.2s;
+  width:100%;
+  padding:12px;
+  border-radius:11px;
+  border:none;
+  font-size:14.5px;
+  font-weight:600;
+  cursor:pointer;
+  margin-top:4px;
+  margin-bottom:8px;
+  transition:0.2s;
 }
-.auth-btn.primary { background: #111; color: #fff; }
-.auth-btn.primary:hover { background: #333; }
-.auth-btn.google { background: #fff; color: #333; border: 1.5px solid #e0e0e0; display: flex; align-items: center; justify-content: center; gap: 8px; }
-.auth-btn.google:hover { background: #f5f5f5; }
-.auth-btn.danger { background: #fee2e2; color: #e53e3e; }
-.auth-btn.danger:hover { background: #fecaca; }
-.toggle-link { text-align: center; font-size: 13px; color: #888; margin-top: 8px; }
-.toggle-link span { color: #111; font-weight: 600; cursor: pointer; text-decoration: underline; }
-.error-msg { color: #e53e3e; font-size: 13px; text-align: center; margin-top: 6px; min-height: 18px; }
+.auth-btn.primary { background:var(--accent-grad); color:#fff; }
+.auth-btn.primary:hover { filter:brightness(1.08); }
+.auth-btn.google { background:var(--bg-2); color:var(--text-0); border:1.5px solid var(--border); display:flex; align-items:center; justify-content:center; gap:8px; }
+.auth-btn.google:hover { background:var(--bg-3); }
+.auth-btn.danger { background:rgba(245,101,101,0.12); color:var(--bad); }
+.auth-btn.danger:hover { background:rgba(245,101,101,0.2); }
+.toggle-link { text-align:center; font-size:13px; color:var(--text-2); margin-top:8px; }
+.toggle-link span { color:var(--accent); font-weight:600; cursor:pointer; }
+.error-msg { color:var(--bad); font-size:13px; text-align:center; margin-top:6px; min-height:18px; }
 
-/* ===== PROFILE MODAL ===== */
 .profile-big-avatar {
-  width: 72px; height: 72px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 30px; font-weight: 700; color: white;
-  margin: 0 auto 14px;
+  width:68px; height:68px;
+  background:var(--accent-grad);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:28px; font-weight:700; color:white;
+  margin:0 auto 14px;
 }
-.profile-detail-name { font-size: 18px; font-weight: 600; text-align: center; color: #111; }
-.profile-detail-email { font-size: 13px; color: #888; text-align: center; margin-top: 4px; margin-bottom: 20px; }
+.profile-detail-name { font-size:17px; font-weight:600; text-align:center; color:var(--text-0); }
+.profile-detail-email { font-size:13px; color:var(--text-2); text-align:center; margin-top:4px; margin-bottom:20px; }
 
-/* ===== MOBILE ===== */
 .mobile-overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.4);
-  z-index: 500;
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(6,6,9,0.55);
+  z-index:500;
 }
 
-/* ===== GENERATED FILES PANEL (slides in from the right) ===== */
+/* ============================================================
+   11. GENERATED FILES PANEL
+   ============================================================ */
 .files-btn {
-  background: none; border: 1px solid #e0e0e0; border-radius: 8px;
-  padding: 6px 12px; font-size: 13px; color: #555; cursor: pointer;
-  display: flex; align-items: center; gap: 6px; transition: 0.15s;
+  background:var(--bg-2); border:1px solid var(--border); border-radius:20px;
+  padding:6px 13px; font-size:13px; color:var(--text-1); cursor:pointer;
+  display:flex; align-items:center; gap:6px; transition:0.15s;
 }
-.files-btn:hover { background: #f5f5f5; }
+.files-btn:hover { background:var(--bg-3); color:var(--text-0); }
 .files-badge {
-  background: #4f46e5; color: #fff; font-size: 10px; font-weight: 700;
-  border-radius: 10px; min-width: 16px; height: 16px; padding: 0 4px;
-  display: none; align-items: center; justify-content: center;
+  background:var(--accent); color:#fff; font-size:10px; font-weight:700;
+  border-radius:10px; min-width:16px; height:16px; padding:0 4px;
+  display:none; align-items:center; justify-content:center;
 }
-.files-badge.show { display: flex; }
+.files-badge.show { display:flex; }
 .files-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.4); z-index: 690;
+  display:none; position:fixed; inset:0;
+  background:rgba(6,6,9,0.55); z-index:690;
 }
-.files-overlay.show { display: block; }
+.files-overlay.show { display:block; }
 .files-panel {
-  position: fixed; top: 0; right: 0; height: 100vh; width: 320px;
-  background: #f7f7f8; border-left: 1px solid #e5e5e5;
-  display: flex; flex-direction: column;
-  transform: translateX(100%); transition: transform 0.3s ease;
-  z-index: 700;
+  position:fixed; top:0; right:0; height:100vh; height:100dvh; width:330px;
+  background:var(--bg-1); border-left:1px solid var(--border-soft);
+  display:flex; flex-direction:column;
+  transform:translateX(100%); transition:transform 0.28s cubic-bezier(.4,0,.2,1);
+  z-index:700;
 }
-.files-panel.open { transform: translateX(0); }
+.files-panel.open { transform:translateX(0); }
 .files-panel-header {
-  padding: 16px 14px; border-bottom: 1px solid #e5e5e5;
-  display: flex; align-items: center; gap: 8px;
+  padding:16px 16px; border-bottom:1px solid var(--border-soft);
+  display:flex; align-items:center; gap:9px;
 }
-.files-panel-title { font-size: 15px; font-weight: 700; color: #111; flex: 1; }
+.files-panel-title { font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--text-0); flex:1; }
 .files-panel-close {
-  background: none; border: none; font-size: 16px; color: #888; cursor: pointer;
-  padding: 4px 8px; border-radius: 6px;
+  background:none; border:none; font-size:15px; color:var(--text-1); cursor:pointer;
+  padding:6px 9px; border-radius:8px;
 }
-.files-panel-close:hover { background: #eee; }
-.files-panel-list { flex: 1; overflow-y: auto; padding: 10px; }
-.files-empty { color: #bbb; font-size: 13px; text-align: center; padding: 30px 12px; }
+.files-panel-close:hover { background:var(--bg-2); }
+.files-panel-list { flex:1; overflow-y:auto; padding:12px; }
+.files-empty { color:var(--text-2); font-size:13px; text-align:center; padding:30px 12px; line-height:1.5; }
 .file-card {
-  background: #fff; border: 1px solid #e5e5e5; border-radius: 10px;
-  padding: 10px 12px; margin-bottom: 8px;
+  background:var(--bg-2); border:1px solid var(--border); border-radius:12px;
+  padding:11px 13px; margin-bottom:8px;
 }
-.file-card-name { font-size: 13px; font-weight: 600; color: #111; word-break: break-all; }
-.file-card-meta { font-size: 11px; color: #999; margin: 2px 0 8px; }
+.file-card-name { font-size:13px; font-weight:600; color:var(--text-0); word-break:break-all; font-family:var(--font-mono); }
+.file-card-meta { font-size:11px; color:var(--text-2); margin:3px 0 9px; }
 .file-card-dl {
-  background: #111; color: #fff; border: none; border-radius: 7px;
-  padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 6px;
+  background:var(--accent-grad); color:#fff; border:none; border-radius:8px;
+  padding:6px 11px; font-size:12px; font-weight:600; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; transition:filter 0.15s;
 }
-.file-card-dl:hover { background: #333; }
+.file-card-dl:hover { filter:brightness(1.1); }
+
+/* ============================================================
+   12. RESPONSIVE + ANIMATIONS
+   ============================================================ */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .sidebar { width:240px; }
+}
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    height: 100vh;
-    z-index: 600;
-    transform: translateX(-100%);
+    position:fixed;
+    top:0; left:0;
+    height:100vh; height:100dvh;
+    z-index:600;
+    transform:translateX(-100%);
+    width:82%;
+    max-width:300px;
   }
-  .sidebar.open { transform: translateX(0); }
-  .mobile-overlay.show { display: block; }
-  .hamburger { display: flex; }
-  .message-row { padding: 10px 16px; }
-  .input-area-wrapper { padding: 10px 12px; }
-  .file-preview-strip { padding: 6px 12px; }
-  .empty-title { font-size: 22px; }
-  .files-panel { width: 85%; }
-  .files-btn span.files-btn-label { display: none; }
+  .sidebar.open { transform:translateX(0); }
+  .sidebar.collapsed { width:82%; max-width:300px; }
+  .mobile-overlay.show { display:block; }
+  .hamburger { display:flex; }
+  .desktop-sidebar-toggle { display:none; }
+  .topbar-mobile-title { display:block; flex:1; text-align:center; }
+  .topbar-mobile-new { display:flex; }
+  .model-selector { display:none; }
+  .files-btn span.files-btn-label { display:none; }
+  .files-btn { padding:7px 11px; }
+
+  .message-row { padding:9px 16px; }
+  .msg-content { max-width:100%; }
+  .msg-content.user-text { max-width:88%; }
+  .file-preview-strip { padding:6px 12px 0; }
+  .input-area-wrapper { padding:10px 12px 14px; }
+  .empty-title { font-size:22px; }
+  .suggestion-grid { grid-template-columns:1fr; max-width:100%; }
+  .files-panel { width:88%; max-width:340px; }
+
+  /* Settings becomes a bottom sheet on mobile */
+  .model-dropdown-menu {
+    position:fixed; top:auto; bottom:0; left:0; right:0;
+    width:100%; max-width:100%;
+    border-radius:20px 20px 0 0;
+    max-height:80vh;
+    animation:sheetUp 0.22s cubic-bezier(.4,0,.2,1);
+    padding-bottom:22px;
+  }
+  @keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+}
+
+@media (min-width: 769px) {
+  .model-dropdown-wrap-mobile-label { display:none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
+}
+
+/* Focus visibility for accessibility */
+button:focus-visible, input:focus-visible, textarea:focus-visible, .chat-item:focus-visible, .suggestion-card:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px;
 }
 </style>
 </head>
@@ -609,12 +854,20 @@ body {
 <!-- SIDEBAR -->
 <div class="sidebar" id="sidebar">
   <div class="sidebar-top">
-    <span class="sidebar-logo">✦ RextFlex AI</span>
-    <button class="new-chat-btn" id="newChatBtn"><i class="fas fa-plus"></i> New</button>
+    <span class="sidebar-logo"><span class="logo-mark">✦</span> RextFlex AI</span>
+    <button class="new-chat-btn" id="newChatBtn" title="New chat" aria-label="New chat"><i class="fas fa-plus"></i></button>
+  </div>
+  <div class="sidebar-search">
+    <i class="fas fa-search"></i>
+    <input type="text" id="chatSearchInput" placeholder="Search chats" aria-label="Search chats">
   </div>
   <div class="chats-label">Recent Chats</div>
   <div class="chats-list" id="chatsList">
-    <div style="color:#bbb; font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>
+    <div style="color:var(--text-2); font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>
+  </div>
+  <div class="sidebar-tools">
+    <button class="sidebar-tool-btn" id="sidebarFilesBtn"><i class="fas fa-folder-open"></i> Files <span class="sidebar-tool-badge" id="sidebarFilesBadge">0</span></button>
+    <button class="sidebar-tool-btn" id="sidebarSettingsBtn"><i class="fas fa-sliders-h"></i> Settings</button>
   </div>
   <div class="sidebar-footer">
     <div class="profile-row" id="profileRowBtn">
@@ -632,9 +885,9 @@ body {
 <div class="files-overlay" id="filesOverlay"></div>
 <div class="files-panel" id="filesPanel">
   <div class="files-panel-header">
-    <i class="fas fa-folder-open" style="color:#4f46e5;"></i>
+    <i class="fas fa-folder-open" style="color:var(--accent);"></i>
     <span class="files-panel-title">Generated Files</span>
-    <button class="files-panel-close" id="filesPanelClose"><i class="fas fa-times"></i></button>
+    <button class="files-panel-close" id="filesPanelClose" aria-label="Close files panel"><i class="fas fa-times"></i></button>
   </div>
   <div class="files-panel-list" id="filesPanelList">
     <div class="files-empty" id="filesEmptyMsg">No files yet — ask RextFlex AI to generate some code and it'll show up here.</div>
@@ -645,39 +898,80 @@ body {
 <div class="main">
   <!-- TOP BAR -->
   <div class="topbar">
-    <button class="hamburger" id="hamburgerBtn"><i class="fas fa-bars"></i></button>
+    <button class="hamburger" id="hamburgerBtn" aria-label="Open sidebar"><i class="fas fa-bars"></i></button>
+    <button class="desktop-sidebar-toggle" id="desktopSidebarToggle" aria-label="Toggle sidebar" title="Toggle sidebar"><i class="fas fa-bars"></i></button>
+
     <div class="model-dropdown-wrap">
-      <button class="model-selector" id="modelSelectorBtn">
-        <span class="model-dot" id="modelDot" style="background:#f59e0b;"></span>
-        <span id="modelBadgeText">my-ollama-api</span>
-        <i class="fas fa-chevron-down" style="font-size:10px; color:#aaa;" id="modelChevron"></i>
+      <button class="model-selector" id="modelSelectorBtn" aria-haspopup="true" aria-expanded="false">
+        <span class="model-dot" id="modelDot" style="background:var(--warn);"></span>
+        <span id="modelBadgeText">GPT-OSS 120B</span>
+        <i class="fas fa-chevron-down" style="font-size:9px; color:var(--text-2);" id="modelChevron"></i>
       </button>
-      <div class="model-dropdown-menu" id="modelDropdown">
-        <div class="model-group-label">Hugging Face Space Connection</div>
-        <div style="padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px;">
-          <div>
-            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">Space ID (username/space-name)</label>
-            <input type="text" id="spaceIdInput" value="rajveer28677/my-ollama-api"
-              style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
+
+      <!-- SETTINGS PANEL: dropdown on desktop, bottom sheet on mobile -->
+      <div class="model-dropdown-menu" id="modelDropdown" role="dialog" aria-label="Model settings">
+        <div class="provider-tabs">
+          <button class="provider-tab active" id="providerTabGroq">Groq</button>
+          <button class="provider-tab" id="providerTabHF">Hugging Face Space</button>
+        </div>
+
+        <!-- GROQ PANE -->
+        <div class="provider-pane active" id="providerPaneGroq">
+          <div class="model-group-label">Model</div>
+          <div id="groqModelList">
+            <div class="model-option selected" data-model="openai/gpt-oss-120b">
+              <span class="model-option-dot"></span>
+              <div class="model-option-info">
+                <div class="model-option-name">GPT-OSS 120B</div>
+                <div class="model-option-desc">Strongest coding &amp; reasoning, 128K context</div>
+              </div>
+              <span class="model-option-badge new-badge">Best for code</span>
+            </div>
+            <div class="model-option" data-model="llama-3.3-70b-versatile">
+              <span class="model-option-dot"></span>
+              <div class="model-option-info">
+                <div class="model-option-name">Llama 3.3 70B</div>
+                <div class="model-option-desc">Versatile, well-rounded</div>
+              </div>
+            </div>
+            <div class="model-option" data-model="openai/gpt-oss-20b">
+              <span class="model-option-dot"></span>
+              <div class="model-option-info">
+                <div class="model-option-name">GPT-OSS 20B</div>
+                <div class="model-option-desc">Fastest, lighter tasks</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">API endpoint name</label>
-            <input type="text" id="apiNameInput" value="/chat"
-              style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
-          </div>
-          <button id="saveOllamaSettingsBtn"
-            style="background:#111; color:#fff; border:none; border-radius:8px; padding:9px; font-size:13px; font-weight:600; cursor:pointer;">
-            Save &amp; Test Connection
-          </button>
-          <div id="ollamaStatusText" style="font-size:11.5px; color:#888;"></div>
+          <hr class="model-divider">
+          <label class="settings-field-label" for="groqApiKeyInput">Groq API key</label>
+          <input type="password" id="groqApiKeyInput" class="settings-input" value="" placeholder="gsk_...">
+          <div style="height:8px;"></div>
+          <button id="saveGroqSettingsBtn" class="settings-save-btn">Save &amp; Test Connection</button>
+          <div id="groqStatusText" class="settings-status"></div>
+        </div>
+
+        <!-- HUGGING FACE PANE -->
+        <div class="provider-pane" id="providerPaneHF">
+          <label class="settings-field-label" for="spaceIdInput">Space ID (username/space-name)</label>
+          <input type="text" id="spaceIdInput" class="settings-input" value="rajveer28677/my-ollama-api">
+          <div style="height:8px;"></div>
+          <label class="settings-field-label" for="apiNameInput">API endpoint name</label>
+          <input type="text" id="apiNameInput" class="settings-input" value="/chat">
+          <div style="height:8px;"></div>
+          <button id="saveOllamaSettingsBtn" class="settings-save-btn">Save &amp; Test Connection</button>
+          <div id="ollamaStatusText" class="settings-status"></div>
         </div>
       </div>
     </div>
+
+    <span class="topbar-mobile-title">RextFlex AI</span>
+
     <div class="topbar-spacer"></div>
-    <button class="files-btn" id="filesBtn" title="Generated files">
+    <button class="files-btn" id="filesBtn" title="Generated files" aria-label="Generated files">
       <i class="fas fa-folder-open"></i> <span class="files-btn-label">Files</span>
       <span class="files-badge" id="filesBadge">0</span>
     </button>
+    <button class="topbar-mobile-new" id="topbarMobileNew" aria-label="New chat" title="New chat"><i class="fas fa-plus"></i></button>
   </div>
 
   <!-- MESSAGES or EMPTY STATE -->
@@ -685,7 +979,29 @@ body {
     <div class="empty-state" id="emptyState">
       <div class="empty-logo">✦</div>
       <div class="empty-title">RextFlex AI</div>
-      <div class="empty-sub">Powered by your local AI • Ask anything</div>
+      <div class="empty-sub">How can I help you today?</div>
+      <div class="suggestion-grid">
+        <button class="suggestion-card" data-prompt="Write code for ">
+          <i class="fas fa-code"></i>
+          <div class="suggestion-card-title">Write code</div>
+          <div class="suggestion-card-sub">Build a script, function, or app</div>
+        </button>
+        <button class="suggestion-card" data-prompt="Explain how ">
+          <i class="fas fa-lightbulb"></i>
+          <div class="suggestion-card-title">Explain something</div>
+          <div class="suggestion-card-sub">Break down a topic simply</div>
+        </button>
+        <button class="suggestion-card" data-prompt="Create a plan for ">
+          <i class="fas fa-list-check"></i>
+          <div class="suggestion-card-title">Create a plan</div>
+          <div class="suggestion-card-sub">Step-by-step for a goal</div>
+        </button>
+        <button class="suggestion-card" data-prompt="Help me solve a problem with ">
+          <i class="fas fa-wand-magic-sparkles"></i>
+          <div class="suggestion-card-title">Help me solve a problem</div>
+          <div class="suggestion-card-sub">Debug or troubleshoot</div>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -696,22 +1012,27 @@ body {
   <div class="input-area-wrapper">
     <div class="input-box">
       <!-- File Attach -->
-      <label style="cursor:pointer;">
-        <div class="kb-btn" title="Attach file"><i class="fas fa-paperclip"></i></div>
+      <div class="attach-wrap">
+        <div class="kb-btn" id="attachMenuBtn" title="Attach" aria-label="Attach file" aria-haspopup="true"><i class="fas fa-plus"></i></div>
+        <div class="attach-menu" id="attachMenu">
+          <div class="attach-menu-item" id="attachUploadFile"><i class="fas fa-file"></i> Upload file</div>
+          <div class="attach-menu-item" id="attachUploadImage"><i class="fas fa-image"></i> Upload image</div>
+        </div>
         <input type="file" id="fileInput" multiple style="display:none;">
-      </label>
+      </div>
 
       <!-- Text Input -->
       <textarea
         class="input-textarea"
         id="messageInput"
-        placeholder="Message RextFlex AI..."
+        placeholder="Ask RextFlex anything..."
         rows="1"
         autocomplete="off"
+        aria-label="Message RextFlex AI"
       ></textarea>
 
       <!-- Send Button -->
-      <button class="kb-btn send-btn" id="sendBtn" disabled title="Send">
+      <button class="kb-btn send-btn" id="sendBtn" disabled title="Send" aria-label="Send message">
         <i class="fas fa-arrow-up"></i>
       </button>
     </div>
@@ -725,8 +1046,8 @@ body {
     <!-- Login Form -->
     <div id="loginFormDiv">
       <h2>✦ RextFlex AI</h2>
-      <input type="email" class="field" id="loginEmail" placeholder="Email address">
-      <input type="password" class="field" id="loginPassword" placeholder="Password">
+      <input type="email" class="field" id="loginEmail" placeholder="Email address" autocomplete="email">
+      <input type="password" class="field" id="loginPassword" placeholder="Password" autocomplete="current-password">
       <button class="auth-btn primary" id="loginBtn">Sign In</button>
       <button class="auth-btn google" id="googleLoginBtn">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
@@ -737,10 +1058,10 @@ body {
     <!-- Signup Form -->
     <div id="signupFormDiv" style="display:none;">
       <h2>✦ Create Account</h2>
-      <input type="text" class="field" id="signupName" placeholder="Full Name">
-      <input type="email" class="field" id="signupEmail" placeholder="Email address">
-      <input type="password" class="field" id="signupPassword" placeholder="Password">
-      <input type="password" class="field" id="signupConfirm" placeholder="Confirm Password">
+      <input type="text" class="field" id="signupName" placeholder="Full Name" autocomplete="name">
+      <input type="email" class="field" id="signupEmail" placeholder="Email address" autocomplete="email">
+      <input type="password" class="field" id="signupPassword" placeholder="Password" autocomplete="new-password">
+      <input type="password" class="field" id="signupConfirm" placeholder="Confirm Password" autocomplete="new-password">
       <button class="auth-btn primary" id="signupBtn">Create Account</button>
       <button class="auth-btn google" id="googleSignupBtn">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
@@ -751,7 +1072,7 @@ body {
     <!-- Verify Email -->
     <div id="verifyDiv" style="display:none;">
       <h2>✉️ Verify Email</h2>
-      <p style="text-align:center; color:#666; font-size:14px; margin-bottom:20px;">We sent a verification link to your email. Please verify and log in.</p>
+      <p style="text-align:center; color:var(--text-1); font-size:14px; margin-bottom:20px;">We sent a verification link to your email. Please verify and log in.</p>
       <button class="auth-btn primary" id="backToLoginBtn">Back to Login</button>
     </div>
   </div>
@@ -793,6 +1114,16 @@ async function getGradioClient() {
   const { Client } = await import("https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js");
   return Client;
 }
+
+// ==================== GROQ CONNECTION ====================
+// NOTE ON SECURITY: this key lives in client-side JS, so it's visible to anyone who
+// views the page source or opens devtools. That's fine for a personal/local build, but
+// if you ever deploy this publicly, route requests through a small backend/serverless
+// proxy instead so the key never ships to the browser. Change the key any time from the
+// Settings panel in the UI (Groq tab) -- it's kept in memory only, never written to Firestore.
+let GROQ_API_KEY = "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";
+let GROQ_MODEL = "openai/gpt-oss-120b";   // strongest coding-capable model on Groq right now
+let AI_PROVIDER = "groq";                 // "groq" | "hf" -- which backend answers messages
 
 // ==================== STATE ====================
 let currentUser = null;
@@ -899,6 +1230,11 @@ function downloadFile(name, content) {
 function renderFilesPanel() {
   filesBadge.textContent = generatedFiles.length;
   filesBadge.classList.toggle('show', generatedFiles.length > 0);
+  const sidebarFilesBadge = document.getElementById('sidebarFilesBadge');
+  if (sidebarFilesBadge) {
+    sidebarFilesBadge.textContent = generatedFiles.length;
+    sidebarFilesBadge.classList.toggle('show', generatedFiles.length > 0);
+  }
   filesPanelList.innerHTML = '';
   if (generatedFiles.length === 0) {
     filesPanelList.appendChild(filesEmptyMsg);
@@ -1082,18 +1418,36 @@ async function loadUserChats() {
     });
 }
 
+function relativeTime(ts) {
+  if (!ts || typeof ts.toDate !== 'function') return '';
+  const diffMs = Date.now() - ts.toDate().getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return ts.toDate().toLocaleDateString();
+}
+
 function renderChatsList(chats) {
   chatsList.innerHTML = '';
   if (chats.length === 0) {
-    chatsList.innerHTML = '<div style="color:#bbb; font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>';
+    chatsList.innerHTML = '<div style="color:var(--text-2); font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>';
     return;
   }
   chats.forEach(chat => {
     const div = document.createElement('div');
     div.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
     div.dataset.id = chat.id;
-    div.innerHTML = `<div class="chat-item-title">${escapeHtml(chat.title || 'New chat')}</div>
-      <button class="chat-delete" data-id="${chat.id}" title="Delete"><i class="fas fa-trash-alt"></i></button>`;
+    div.dataset.title = (chat.title || 'New chat').toLowerCase();
+    const time = relativeTime(chat.updatedAt);
+    div.innerHTML = `<div class="chat-item-body">
+        <span class="chat-item-title">${escapeHtml(chat.title || 'New chat')}</span>
+        ${time ? `<div class="chat-item-time">${time}</div>` : ''}
+      </div>
+      <button class="chat-delete" data-id="${chat.id}" title="Delete" aria-label="Delete chat"><i class="fas fa-trash-alt"></i></button>`;
     div.addEventListener('click', (e) => { if (!e.target.closest('.chat-delete')) switchChat(chat.id); });
     chatsList.appendChild(div);
   });
@@ -1108,6 +1462,14 @@ function renderChatsList(chats) {
         if (currentChatId === id) { currentChatId = null; chatContainer.innerHTML = ''; chatContainer.appendChild(emptyState); emptyState.style.display='flex'; await createNewChat(); }
       }
     });
+  });
+  applyChatSearch();
+}
+
+function applyChatSearch() {
+  const q = (chatSearchInput?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#chatsList .chat-item').forEach(item => {
+    item.style.display = (!q || (item.dataset.title || '').includes(q)) ? '' : 'none';
   });
 }
 
@@ -1159,12 +1521,24 @@ function displayMessage(msg) {
   const initial = isUser
     ? (currentUser?.displayName || 'U').charAt(0).toUpperCase()
     : 'R';
+
   if (!isUser) {
     const av = document.createElement('div');
     av.className = 'msg-avatar ai-av';
     av.textContent = 'R';
     row.appendChild(av);
   }
+
+  const block = document.createElement('div');
+  block.className = 'msg-block';
+
+  if (!isUser) {
+    const name = document.createElement('div');
+    name.className = 'msg-name';
+    name.textContent = 'RextFlex AI';
+    block.appendChild(name);
+  }
+
   const content = document.createElement('div');
   content.className = `msg-content ${isUser ? 'user-text' : 'ai-text'}`;
   if (isUser) {
@@ -1184,33 +1558,84 @@ function displayMessage(msg) {
       content.innerHTML = formatMarkdown(msg.content || '...');
     }
   }
+  block.appendChild(content);
+
   if (isUser) {
     const av = document.createElement('div');
     av.className = 'msg-avatar user-av';
     av.textContent = initial;
-    row.appendChild(content);
+    row.appendChild(block);
     row.appendChild(av);
   } else {
-    row.appendChild(content);
+    row.appendChild(block);
   }
   chatContainer.appendChild(row);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 function formatMarkdown(text) {
-  // Render download link tokens: DOWNLOAD_LINK:bloburl:filename
+  // Segments that are already-safe HTML get stashed behind a placeholder token so the
+  // plain-text escaping pass below (which fixes the original's raw-HTML-injection risk)
+  // doesn't touch them, and they're restored verbatim at the end.
+  const placeholders = [];
+  const stash = (html) => { placeholders.push(html); return `\u0000PH${placeholders.length - 1}\u0000`; };
+
+  const langLabel = { python:'python', py:'python', javascript:'javascript', js:'javascript',
+    jsx:'jsx', tsx:'tsx', html:'html', css:'css', json:'json', java:'java', c:'c', cpp:'cpp',
+    'c++':'cpp', bash:'bash', sh:'bash', shell:'bash', xml:'xml', yaml:'yaml', yml:'yaml',
+    sql:'sql', typescript:'typescript', ts:'typescript', kotlin:'kotlin', swift:'swift',
+    go:'go', rust:'rust', php:'php', ruby:'ruby' };
+
+  // 1. Download link tokens -> pill
   text = text.replace(/DOWNLOAD_LINK:(blob:[^:]+):([^\n]+)/g, (_, url, name) => {
-    return `<a href="${url}" download="${name.trim()}" style="display:inline-flex;align-items:center;gap:6px;background:#f0f0f0;border:1px solid #ddd;border-radius:20px;padding:6px 14px;color:#111;text-decoration:none;font-size:13px;margin:4px 0;"><i class='fas fa-download' style='color:#4f46e5;'></i> Download ${name.trim()}</a>`;
+    const safeName = escapeHtml(name.trim());
+    return stash(`<a href="${url}" download="${safeName}" class="attach-pill" style="text-decoration:none;"><i class="fas fa-download" style="color:var(--accent);"></i> Download ${safeName}</a>`);
   });
-  let html = text
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
+
+  // 2. Fenced code blocks -> IDE-style panel with language label + copy button
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const key = (lang || '').trim().toLowerCase();
+    const label = langLabel[key] || key || 'text';
+    const trimmed = code.replace(/\n$/, '');
+    const escaped = escapeHtml(trimmed);
+    const raw = encodeURIComponent(trimmed);
+    return stash(`<div class="code-block"><div class="code-block-header"><span class="code-block-lang">${escapeHtml(label)}</span><button class="code-copy-btn" data-code="${raw}" type="button"><i class="fas fa-copy"></i> Copy</button></div><pre><code>${escaped}</code></pre></div>`);
+  });
+
+  // 3. Inline code
+  text = text.replace(/`([^`]+)`/g, (_, code) => stash(`<code>${escapeHtml(code)}</code>`));
+
+  // 4. Escape everything else that remains (plain text, never trusted as HTML)
+  text = escapeHtml(text);
+
+  // 5. Lightweight markdown on the now-escaped text (safe: none of these tokens got encoded)
+  text = text
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" style="color:#4f46e5;">$1</a>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);">$1</a>')
     .replace(/\n/g, '<br>');
-  return html;
+
+  // 6. Restore the stashed safe-HTML segments
+  text = text.replace(/\u0000PH(\d+)\u0000/g, (_, i) => placeholders[Number(i)]);
+
+  return text;
 }
+
+// Copy-to-clipboard for code blocks (event delegation -- works for messages rendered at any time)
+chatContainer.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.code-copy-btn');
+  if (!btn) return;
+  const code = decodeURIComponent(btn.dataset.code || '');
+  try {
+    await navigator.clipboard.writeText(code);
+    const original = btn.innerHTML;
+    btn.classList.add('copied');
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = original; }, 1500);
+  } catch (err) {
+    console.error('Copy failed:', err);
+  }
+});
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -1248,7 +1673,9 @@ async function sendMessage() {
   });
 
   try {
-    let aiReply = await callSpace(currentChatId, prompt, filesToSend);
+    let aiReply = AI_PROVIDER === 'groq'
+      ? await callGroq(currentChatId, prompt, filesToSend)
+      : await callSpace(currentChatId, prompt, filesToSend);
     // Inject real download links for binary files if user asked
     const binaryFiles = filesToSend.filter(f => f.type === 'binary' && f.blobUrl);
     if (binaryFiles.length > 0 && /download|link|url|bhejo|send|de do/i.test(prompt)) {
@@ -1306,48 +1733,216 @@ async function callSpace(chatId, userPrompt, attachedFiles) {
   }
 }
 
-// ==================== SETTINGS DROPDOWN JS ====================
+// ==================== GROQ API CALL ====================
+async function callGroq(chatId, userPrompt, attachedFiles) {
+  if (!GROQ_API_KEY) throw new Error('No Groq API key set. Add one in Settings → Groq.');
+
+  const snapshot = await db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc').get();
+  let history = [];
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.role === 'user') history.push({ role: 'user', content: data.content });
+    else if (data.role === 'ai' && !data.content.includes('🤖')) history.push({ role: 'assistant', content: data.content });
+  });
+
+  let finalUserText = userPrompt || '';
+  for (const f of attachedFiles) {
+    if (f.type === 'text') {
+      finalUserText += `\n\n[File: ${f.name} (${formatSize(f.size)})\nContent:\n${f.content}]`;
+    } else {
+      finalUserText += `\n\n[Binary/Zip file: ${f.name} (${formatSize(f.size)}). Cannot read contents directly. If user asks for a download link, say the file is available as a local blob URL and guide them.]`;
+    }
+  }
+  // The last entry is the current user turn we just wrote to Firestore -- Groq's chat
+  // completions endpoint wants that as the final "user" message, not duplicated in history.
+  if (history.length > 0 && history[history.length - 1].role === 'user') {
+    history.pop();
+  }
+
+  const systemInstruction = "You are RextFlex AI, a helpful assistant powered by a fast open-weight model hosted on Groq. Always identify as RextFlex AI. The full conversation history is included in the messages above this one — you DO have access to everything the user said earlier in this chat. When asked what was said previously, look back at the actual messages and answer directly; never claim you lack memory of this conversation. Whenever you write code, put the filename as a comment on the very first line inside the code block (e.g. # app.py or // script.js) so it can be saved as a real file. Answer helpfully in the user's language. Be concise and clear.";
+
+  const messages = [
+    { role: 'system', content: systemInstruction },
+    ...history,
+    { role: 'user', content: finalUserText }
+  ];
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        temperature: 0.3,
+        max_completion_tokens: 1024
+      })
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody?.error?.message || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const reply = data?.choices?.[0]?.message?.content;
+    if (!reply) throw new Error('empty response');
+    return reply;
+  } catch (err) {
+    throw new Error(`Groq call failed: ${err.message}. Check the API key and model in Settings → Groq.`);
+  }
+}
+
+// ==================== SETTINGS PANEL JS ====================
 const modelSelectorBtn = document.getElementById('modelSelectorBtn');
 const modelDropdown = document.getElementById('modelDropdown');
+const modelChevron = document.getElementById('modelChevron');
+const modelDot = document.getElementById('modelDot');
+const modelBadgeText = document.getElementById('modelBadgeText');
 const spaceIdInput = document.getElementById('spaceIdInput');
 const apiNameInput = document.getElementById('apiNameInput');
 const ollamaStatusText = document.getElementById('ollamaStatusText');
+const groqApiKeyInput = document.getElementById('groqApiKeyInput');
+const groqStatusText = document.getElementById('groqStatusText');
+const providerTabGroq = document.getElementById('providerTabGroq');
+const providerTabHF = document.getElementById('providerTabHF');
+const providerPaneGroq = document.getElementById('providerPaneGroq');
+const providerPaneHF = document.getElementById('providerPaneHF');
+const chatSearchInput = document.getElementById('chatSearchInput');
 
-modelSelectorBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  modelDropdown.classList.toggle('open');
-  document.getElementById('modelChevron').style.transform = modelDropdown.classList.contains('open') ? 'rotate(180deg)' : '';
-});
+const GROQ_MODEL_LABELS = {
+  'openai/gpt-oss-120b': 'GPT-OSS 120B',
+  'llama-3.3-70b-versatile': 'Llama 3.3 70B',
+  'openai/gpt-oss-20b': 'GPT-OSS 20B'
+};
+groqApiKeyInput.value = GROQ_API_KEY;
 
-document.addEventListener('click', () => {
-  modelDropdown.classList.remove('open');
-  document.getElementById('modelChevron').style.transform = '';
-});
+function updateModelBadge() {
+  modelBadgeText.textContent = AI_PROVIDER === 'groq'
+    ? (GROQ_MODEL_LABELS[GROQ_MODEL] || GROQ_MODEL)
+    : (SPACE_ID.split('/')[1] || SPACE_ID || 'space');
+}
+updateModelBadge();
 
+function toggleSettings(forceOpen) {
+  const open = forceOpen !== undefined ? forceOpen : !modelDropdown.classList.contains('open');
+  modelDropdown.classList.toggle('open', open);
+  modelChevron.style.transform = open ? 'rotate(180deg)' : '';
+  modelSelectorBtn.setAttribute('aria-expanded', String(open));
+}
+
+modelSelectorBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSettings(); });
+document.addEventListener('click', () => toggleSettings(false));
 modelDropdown.addEventListener('click', e => e.stopPropagation());
+
+// Sidebar entry points (also the only way into Settings on mobile, since the topbar badge is hidden there)
+document.getElementById('sidebarSettingsBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  sidebar.classList.remove('open'); mobileOverlay.classList.remove('show');
+  toggleSettings(true);
+});
+document.getElementById('sidebarFilesBtn').addEventListener('click', () => {
+  sidebar.classList.remove('open'); mobileOverlay.classList.remove('show');
+  openFilesPanel();
+});
+
+// Provider tabs
+function setActiveProvider(provider) {
+  AI_PROVIDER = provider;
+  providerTabGroq.classList.toggle('active', provider === 'groq');
+  providerTabHF.classList.toggle('active', provider === 'hf');
+  providerPaneGroq.classList.toggle('active', provider === 'groq');
+  providerPaneHF.classList.toggle('active', provider === 'hf');
+  updateModelBadge();
+}
+providerTabGroq.addEventListener('click', () => setActiveProvider('groq'));
+providerTabHF.addEventListener('click', () => setActiveProvider('hf'));
+
+// Groq model picker
+document.getElementById('groqModelList').addEventListener('click', (e) => {
+  const opt = e.target.closest('.model-option');
+  if (!opt) return;
+  GROQ_MODEL = opt.dataset.model;
+  document.querySelectorAll('#groqModelList .model-option').forEach(el => el.classList.toggle('selected', el === opt));
+  if (AI_PROVIDER === 'groq') updateModelBadge();
+});
+
+// Save & test the Groq connection
+document.getElementById('saveGroqSettingsBtn').addEventListener('click', async () => {
+  GROQ_API_KEY = groqApiKeyInput.value.trim();
+  setActiveProvider('groq');
+  groqStatusText.textContent = 'Testing connection...';
+  modelDot.style.background = 'var(--warn)';
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} — check your API key`);
+    groqStatusText.textContent = '✅ Connected';
+    modelDot.style.background = 'var(--good)';
+  } catch (err) {
+    groqStatusText.textContent = '❌ ' + err.message;
+    modelDot.style.background = 'var(--bad)';
+  }
+});
 
 // Save & test the HF Space connection
 document.getElementById('saveOllamaSettingsBtn').addEventListener('click', async () => {
   SPACE_ID = spaceIdInput.value.trim();
   API_NAME = apiNameInput.value.trim() || '/chat';
-  document.getElementById('modelBadgeText').textContent = SPACE_ID.split('/')[1] || SPACE_ID || 'space';
+  setActiveProvider('hf');
 
   ollamaStatusText.textContent = 'Testing connection... (can take a minute if the Space was asleep)';
-  document.getElementById('modelDot').style.background = '#f59e0b';
+  modelDot.style.background = 'var(--warn)';
   try {
     const Client = await getGradioClient();
     await Client.connect(SPACE_ID);
     ollamaStatusText.textContent = '✅ Connected';
-    document.getElementById('modelDot').style.background = '#10a37f';
+    modelDot.style.background = 'var(--good)';
   } catch (err) {
     ollamaStatusText.textContent = '❌ ' + err.message;
-    document.getElementById('modelDot').style.background = '#e53e3e';
+    modelDot.style.background = 'var(--bad)';
   }
 });
 
-// Test the default connection once on load
+// Test the default (Groq) connection once on load
 window.addEventListener('load', () => {
-  document.getElementById('saveOllamaSettingsBtn').click();
+  document.getElementById('saveGroqSettingsBtn').click();
+});
+
+// ==================== SIDEBAR SEARCH ====================
+chatSearchInput.addEventListener('input', applyChatSearch);
+
+// ==================== DESKTOP SIDEBAR COLLAPSE ====================
+document.getElementById('desktopSidebarToggle').addEventListener('click', () => {
+  sidebar.classList.toggle('collapsed');
+});
+
+// ==================== MOBILE TOPBAR NEW CHAT ====================
+document.getElementById('topbarMobileNew').addEventListener('click', () => { if (currentUser) createNewChat(); });
+
+// ==================== ATTACH MENU ====================
+const attachMenuBtn = document.getElementById('attachMenuBtn');
+const attachMenu = document.getElementById('attachMenu');
+attachMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); attachMenu.classList.toggle('open'); });
+document.addEventListener('click', () => attachMenu.classList.remove('open'));
+attachMenu.addEventListener('click', e => e.stopPropagation());
+document.getElementById('attachUploadFile').addEventListener('click', () => {
+  fileInput.removeAttribute('accept'); fileInput.click(); attachMenu.classList.remove('open');
+});
+document.getElementById('attachUploadImage').addEventListener('click', () => {
+  fileInput.setAttribute('accept', 'image/*'); fileInput.click(); attachMenu.classList.remove('open');
+});
+
+// ==================== WELCOME SCREEN SUGGESTION CARDS ====================
+document.querySelectorAll('.suggestion-card').forEach(card => {
+  card.addEventListener('click', () => {
+    messageInput.value = card.dataset.prompt || '';
+    messageInput.focus();
+    messageInput.dispatchEvent(new Event('input'));
+    messageInput.selectionStart = messageInput.selectionEnd = messageInput.value.length;
+  });
 });
 
 </script>
