@@ -391,6 +391,14 @@ body {
 }
 .settings-save-btn:hover { filter:brightness(1.08); }
 .settings-status { font-size:11.5px; color:var(--text-2); margin-top:8px; min-height:14px; }
+.settings-textarea {
+  width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:9px;
+  font-size:11.5px; font-family:var(--font-mono); color:var(--text-0); background:var(--bg-2);
+  outline:none; transition:0.15s; resize:vertical; min-height:90px; line-height:1.5;
+}
+.settings-textarea:focus { border-color:var(--accent); }
+.settings-hint { font-size:10.5px; color:var(--text-2); margin-top:5px; line-height:1.5; }
+.settings-hint code { font-family:var(--font-mono); background:var(--bg-3); padding:1px 4px; border-radius:4px; }
 
 /* ============================================================
    7. CHAT / MESSAGES
@@ -575,6 +583,18 @@ body {
   font-size:13px; line-height:1;
   padding:0 2px;
 }
+.file-chip.video-chip { border-color:rgba(124,108,255,0.4); background:var(--accent-dim); color:var(--text-0); }
+
+.msg-video-wrap { margin-top:10px; max-width:360px; }
+.msg-video-wrap video {
+  width:100%; border-radius:var(--radius-md); display:block;
+  border:1px solid var(--border); background:#000;
+}
+.msg-video-dl {
+  display:inline-flex; align-items:center; gap:6px; margin-top:8px;
+  font-size:12px; color:var(--accent); text-decoration:none;
+}
+.video-progress { font-size:12px; color:var(--text-2); margin-top:4px; }
 .chip-remove:hover { color:var(--bad); }
 
 .input-area-wrapper {
@@ -913,6 +933,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .chat-item:fo
         <div class="provider-tabs">
           <button class="provider-tab active" id="providerTabGroq">Groq</button>
           <button class="provider-tab" id="providerTabHF">Hugging Face Space</button>
+          <button class="provider-tab" id="providerTabVideo">Video</button>
         </div>
 
         <!-- GROQ PANE -->
@@ -960,6 +981,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .chat-item:fo
           <div style="height:8px;"></div>
           <button id="saveOllamaSettingsBtn" class="settings-save-btn">Save &amp; Test Connection</button>
           <div id="ollamaStatusText" class="settings-status"></div>
+        </div>
+
+        <!-- VIDEO (COMFYUI) PANE -->
+        <div class="provider-pane" id="providerPaneVideo">
+          <label class="settings-field-label" for="comfyServerUrlInput">ComfyUI server URL (your ngrok link)</label>
+          <input type="text" id="comfyServerUrlInput" class="settings-input" value="" placeholder="https://xxxx.ngrok-free.dev">
+          <div style="height:8px;"></div>
+          <label class="settings-field-label" for="comfyWorkflowJsonInput">Workflow (API format JSON)</label>
+          <textarea id="comfyWorkflowJsonInput" class="settings-textarea" placeholder='Paste the exported API-format workflow JSON here'></textarea>
+          <div class="settings-hint">
+            In ComfyUI: get the working I2V workflow open (the one with your model loaded) → top menu <b>Workflow</b> → <b>Export (API)</b>. If you don't see that option, turn on <b>Settings → Dev Mode</b> in ComfyUI first. Paste the downloaded JSON here — this app auto-fills the <code>LoadImage</code> node and the prompt text field before sending.
+          </div>
+          <div style="height:8px;"></div>
+          <button id="saveComfySettingsBtn" class="settings-save-btn">Save &amp; Test Connection</button>
+          <div id="comfyStatusText" class="settings-status"></div>
         </div>
       </div>
     </div>
@@ -1017,6 +1053,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .chat-item:fo
         <div class="attach-menu" id="attachMenu">
           <div class="attach-menu-item" id="attachUploadFile"><i class="fas fa-file"></i> Upload file</div>
           <div class="attach-menu-item" id="attachUploadImage"><i class="fas fa-image"></i> Upload image</div>
+          <div class="attach-menu-item" id="attachGenerateVideo"><i class="fas fa-film"></i> Image → Video</div>
         </div>
         <input type="file" id="fileInput" multiple style="display:none;">
       </div>
@@ -1132,6 +1169,13 @@ let messagesListener = null;
 let chatsListener = null;
 let selectedFiles = [];
 
+// ==================== COMFYUI (IMAGE → VIDEO) ====================
+let COMFY_SERVER_URL = "";      // your ngrok URL, e.g. https://xxxx.ngrok-free.dev
+let COMFY_WORKFLOW_JSON = "";   // raw text of the exported API-format workflow JSON
+let pendingVideoFile = null;    // the actual image File object waiting to be sent
+let pendingVideoPreviewUrl = null;
+let videoGenPending = false;    // true right after "Image → Video" is clicked, until a file is chosen
+
 // ==================== DOM ====================
 const chatContainer = document.getElementById('chatContainer');
 const emptyState = document.getElementById('emptyState');
@@ -1151,7 +1195,7 @@ const profileModal = document.getElementById('profileModal');
 messageInput.addEventListener('input', () => {
   messageInput.style.height = 'auto';
   messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
-  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
+  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0 && !pendingVideoFile;
 });
 messageInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1259,6 +1303,21 @@ document.getElementById('profileRowBtn').onclick = () => {
 // ==================== FILE ATTACH ====================
 fileInput.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files);
+
+  // Branch: this pick came from "Image → Video", not the normal attach flow
+  if (videoGenPending) {
+    videoGenPending = false;
+    const file = files[0];
+    fileInput.value = '';
+    if (!file || !file.type.startsWith('image/')) { return; }
+    pendingVideoFile = file;
+    pendingVideoPreviewUrl = URL.createObjectURL(file);
+    updateFilePreview();
+    sendBtn.disabled = false;
+    messageInput.placeholder = 'Describe the motion (optional) and hit send...';
+    return;
+  }
+
   const textExts = ['js','html','htm','txt','css','py','json','ts','jsx','tsx','md','xml','csv','yaml','yml','sh','php','java','cpp','c','h'];
   for (const file of files) {
     const isText = file.type.startsWith('text/') || textExts.some(ext => file.name.toLowerCase().endsWith('.'+ext));
@@ -1274,7 +1333,7 @@ fileInput.addEventListener('change', async (e) => {
     }
   }
   fileInput.value = '';
-  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
+  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0 && !pendingVideoFile;
 });
 
 function formatSize(bytes) {
@@ -1286,8 +1345,21 @@ function formatSize(bytes) {
 
 function updateFilePreview() {
   filePreviewStrip.innerHTML = '';
-  if (selectedFiles.length === 0) { filePreviewStrip.style.display = 'none'; return; }
+  if (selectedFiles.length === 0 && !pendingVideoFile) { filePreviewStrip.style.display = 'none'; return; }
   filePreviewStrip.style.display = 'flex';
+  if (pendingVideoFile) {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip video-chip';
+    chip.innerHTML = `<i class="fas fa-film"></i> ${escapeHtml(pendingVideoFile.name.substring(0,22))} → video <button class="chip-remove">✕</button>`;
+    chip.querySelector('.chip-remove').onclick = () => {
+      pendingVideoFile = null;
+      if (pendingVideoPreviewUrl) { URL.revokeObjectURL(pendingVideoPreviewUrl); pendingVideoPreviewUrl = null; }
+      messageInput.placeholder = 'Ask RextFlex anything...';
+      sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
+      updateFilePreview();
+    };
+    filePreviewStrip.appendChild(chip);
+  }
   selectedFiles.forEach((f, idx) => {
     const chip = document.createElement('div');
     chip.className = 'file-chip';
@@ -1556,6 +1628,13 @@ function displayMessage(msg) {
       content.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
     } else {
       content.innerHTML = formatMarkdown(msg.content || '...');
+      if (msg.videoUrl) {
+        const vwrap = document.createElement('div');
+        vwrap.className = 'msg-video-wrap';
+        vwrap.innerHTML = `<video controls loop playsinline preload="metadata" src="${escapeHtml(msg.videoUrl)}"></video>
+          <a class="msg-video-dl" href="${escapeHtml(msg.videoUrl)}" download target="_blank" rel="noopener"><i class="fas fa-download"></i> Download video</a>`;
+        content.appendChild(vwrap);
+      }
     }
   }
   block.appendChild(content);
@@ -1647,7 +1726,21 @@ sendBtn.onclick = sendMessage;
 
 async function sendMessage() {
   const prompt = messageInput.value.trim();
-  if ((!prompt && selectedFiles.length === 0) || !currentUser || !currentChatId) return;
+  if ((!prompt && selectedFiles.length === 0 && !pendingVideoFile) || !currentUser || !currentChatId) return;
+
+  // Image → Video takes a completely different path (ComfyUI, not Groq/HF)
+  if (pendingVideoFile) {
+    const imageFile = pendingVideoFile;
+    pendingVideoFile = null;
+    if (pendingVideoPreviewUrl) { URL.revokeObjectURL(pendingVideoPreviewUrl); pendingVideoPreviewUrl = null; }
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+    messageInput.placeholder = 'Ask RextFlex anything...';
+    sendBtn.disabled = true;
+    updateFilePreview();
+    return sendVideoGenMessage(prompt, imageFile);
+  }
+
   const filesToSend = [...selectedFiles];
   messageInput.value = '';
   messageInput.style.height = 'auto';
@@ -1687,6 +1780,132 @@ async function sendMessage() {
   } catch(e) {
     await loadingRef.update({ content: `❌ Error: ${e.message}` });
   }
+}
+
+// ==================== IMAGE → VIDEO (COMFYUI) ====================
+async function sendVideoGenMessage(prompt, imageFile) {
+  await db.collection('chats').doc(currentChatId).collection('messages').add({
+    role: 'user', content: prompt || '🎬 Generate a video from this image',
+    attachments: [{ name: imageFile.name }],
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  const chatSnap = await db.collection('chats').doc(currentChatId).get();
+  if (chatSnap.exists && chatSnap.data().title === 'New chat') {
+    const title = (prompt || `Video: ${imageFile.name}`).substring(0, 40);
+    await db.collection('chats').doc(currentChatId).update({ title, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } else {
+    await db.collection('chats').doc(currentChatId).update({ updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  }
+
+  const loadingRef = await db.collection('chats').doc(currentChatId).collection('messages').add({
+    role: 'ai', content: '🎬 Uploading image to ComfyUI...', timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  if (!COMFY_SERVER_URL || !COMFY_WORKFLOW_JSON) {
+    await loadingRef.update({ content: "❌ ComfyUI isn't configured yet. Open Settings (top bar) → **Video** tab, paste your ngrok server URL and your exported workflow JSON, then try again." });
+    return;
+  }
+
+  try {
+    const onProgress = (elapsedSec) => {
+      const mins = Math.floor(elapsedSec / 60), secs = elapsedSec % 60;
+      loadingRef.update({ content: `🎬 Generating on ComfyUI... ${mins > 0 ? mins + 'm ' : ''}${secs}s elapsed (14B model on a T4 can take a while, please wait)` }).catch(() => {});
+    };
+    const videoUrl = await runComfyVideoGen(COMFY_SERVER_URL, COMFY_WORKFLOW_JSON, imageFile, prompt, onProgress);
+    await loadingRef.update({ content: "✅ Here's your video:", videoUrl, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch (e) {
+    await loadingRef.update({ content: `❌ Video generation failed: ${e.message}` });
+  }
+}
+
+// Talks directly to the ComfyUI HTTP API: uploads the image, patches the saved
+// workflow (LoadImage node + prompt text node), queues it, polls /history, and
+// returns a playable /view URL for the resulting video/gif once it's done.
+async function runComfyVideoGen(serverUrl, workflowJsonRaw, imageFile, userPrompt, onProgress) {
+  let workflow;
+  try { workflow = JSON.parse(workflowJsonRaw); }
+  catch { throw new Error('The saved workflow JSON is invalid — re-export it from ComfyUI (Workflow → Export (API)) and re-save it in Settings → Video.'); }
+
+  // ngrok's free tier shows an HTML interstitial to plain browser requests unless this header is present.
+  const comfyHeaders = { 'ngrok-skip-browser-warning': 'true' };
+
+  // 1. Upload the image to ComfyUI's input folder
+  const form = new FormData();
+  form.append('image', imageFile);
+  form.append('overwrite', 'true');
+  const uploadRes = await fetch(`${serverUrl}/upload/image`, { method: 'POST', headers: comfyHeaders, body: form });
+  if (!uploadRes.ok) throw new Error(`Image upload failed (HTTP ${uploadRes.status}). Check the server URL is correct and ComfyUI was launched with --enable-cors-header "*".`);
+  const uploadData = await uploadRes.json();
+  const uploadedName = uploadData.subfolder ? `${uploadData.subfolder}/${uploadData.name}` : uploadData.name;
+
+  // 2. Patch the workflow: point every LoadImage node at the uploaded file,
+  //    and (if the user typed a prompt) fill the first text-encode node found.
+  let foundImageNode = false, foundPromptNode = false;
+  for (const nodeId in workflow) {
+    const node = workflow[nodeId];
+    if (!node || !node.class_type || !node.inputs) continue;
+    if (node.class_type === 'LoadImage') { node.inputs.image = uploadedName; foundImageNode = true; }
+    if (userPrompt && !foundPromptNode && /text ?encode/i.test(node.class_type)) {
+      if (typeof node.inputs.positive_prompt === 'string') { node.inputs.positive_prompt = userPrompt; foundPromptNode = true; }
+      else if (typeof node.inputs.text === 'string') { node.inputs.text = userPrompt; foundPromptNode = true; }
+      else if (typeof node.inputs.prompt === 'string') { node.inputs.prompt = userPrompt; foundPromptNode = true; }
+    }
+  }
+  if (!foundImageNode) throw new Error('No LoadImage node found in the saved workflow JSON — make sure you exported the exact I2V workflow you already tested in ComfyUI.');
+
+  // 3. Queue it
+  const clientId = crypto.randomUUID ? crypto.randomUUID() : `web_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const queueRes = await fetch(`${serverUrl}/prompt`, {
+    method: 'POST',
+    headers: { ...comfyHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: workflow, client_id: clientId })
+  });
+  if (!queueRes.ok) {
+    const errBody = await queueRes.json().catch(() => ({}));
+    const detail = errBody?.error?.message || (errBody?.node_errors ? JSON.stringify(errBody.node_errors) : '');
+    throw new Error(`ComfyUI rejected the workflow (HTTP ${queueRes.status}). ${detail || 'A model/node in the saved workflow may not match your current setup.'}`);
+  }
+  const queueData = await queueRes.json();
+  const promptId = queueData.prompt_id;
+  if (!promptId) throw new Error('ComfyUI did not return a prompt_id.');
+
+  // 4. Poll /history until outputs show up (T4 + 14B fp8 is slow, so this waits generously)
+  const start = Date.now();
+  const timeoutMs = 40 * 60 * 1000; // 40 min ceiling
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 5000));
+    onProgress(Math.floor((Date.now() - start) / 1000));
+    const histRes = await fetch(`${serverUrl}/history/${promptId}`, { headers: comfyHeaders });
+    if (!histRes.ok) continue;
+    const histData = await histRes.json();
+    const entry = histData[promptId];
+    if (!entry) continue;
+    if (entry.status && entry.status.status_str === 'error') {
+      const msgs = (entry.status.messages || []).map(m => JSON.stringify(m)).join(' | ');
+      throw new Error(`ComfyUI reported an error: ${msgs || 'unknown error — check /content/comfyui.log in Colab'}`);
+    }
+    if (entry.outputs && Object.keys(entry.outputs).length > 0) {
+      // 5. Pick the result file: prefer video/gif-like extensions, else fall back to any output
+      let candidate = null;
+      for (const nodeId in entry.outputs) {
+        const out = entry.outputs[nodeId];
+        for (const key in out) {
+          const val = out[key];
+          if (!Array.isArray(val)) continue;
+          for (const item of val) {
+            if (!item || !item.filename) continue;
+            if (/\.(mp4|webm|gif|webp)$/i.test(item.filename)) candidate = item;
+            else if (!candidate) candidate = item;
+          }
+        }
+      }
+      if (!candidate) throw new Error('ComfyUI finished but produced no file output — check the workflow includes a Save/Combine video node.');
+      const params = new URLSearchParams({ filename: candidate.filename, subfolder: candidate.subfolder || '', type: candidate.type || 'output' });
+      return `${serverUrl}/view?${params.toString()}`;
+    }
+  }
+  throw new Error('Timed out after 40 minutes. The GPU may be overloaded or hit an out-of-memory error — check /content/comfyui.log in Colab.');
 }
 
 // ==================== HUGGING FACE SPACE API CALL ====================
@@ -1807,8 +2026,13 @@ const groqApiKeyInput = document.getElementById('groqApiKeyInput');
 const groqStatusText = document.getElementById('groqStatusText');
 const providerTabGroq = document.getElementById('providerTabGroq');
 const providerTabHF = document.getElementById('providerTabHF');
+const providerTabVideo = document.getElementById('providerTabVideo');
 const providerPaneGroq = document.getElementById('providerPaneGroq');
 const providerPaneHF = document.getElementById('providerPaneHF');
+const providerPaneVideo = document.getElementById('providerPaneVideo');
+const comfyServerUrlInput = document.getElementById('comfyServerUrlInput');
+const comfyWorkflowJsonInput = document.getElementById('comfyWorkflowJsonInput');
+const comfyStatusText = document.getElementById('comfyStatusText');
 const chatSearchInput = document.getElementById('chatSearchInput');
 
 const GROQ_MODEL_LABELS = {
@@ -1849,15 +2073,44 @@ document.getElementById('sidebarFilesBtn').addEventListener('click', () => {
 
 // Provider tabs
 function setActiveProvider(provider) {
-  AI_PROVIDER = provider;
+  // "video" is just a settings tab (ComfyUI config), not a text-chat backend,
+  // so it never touches AI_PROVIDER / the model badge.
+  if (provider === 'groq' || provider === 'hf') { AI_PROVIDER = provider; updateModelBadge(); }
   providerTabGroq.classList.toggle('active', provider === 'groq');
   providerTabHF.classList.toggle('active', provider === 'hf');
+  providerTabVideo.classList.toggle('active', provider === 'video');
   providerPaneGroq.classList.toggle('active', provider === 'groq');
   providerPaneHF.classList.toggle('active', provider === 'hf');
-  updateModelBadge();
+  providerPaneVideo.classList.toggle('active', provider === 'video');
 }
 providerTabGroq.addEventListener('click', () => setActiveProvider('groq'));
 providerTabHF.addEventListener('click', () => setActiveProvider('hf'));
+providerTabVideo.addEventListener('click', () => setActiveProvider('video'));
+
+// Save & test the ComfyUI (Image → Video) connection
+comfyServerUrlInput.addEventListener('input', () => {}); // value read live from the input on save
+document.getElementById('saveComfySettingsBtn').addEventListener('click', async () => {
+  COMFY_SERVER_URL = comfyServerUrlInput.value.trim().replace(/\/$/, '');
+  COMFY_WORKFLOW_JSON = comfyWorkflowJsonInput.value.trim();
+  comfyStatusText.textContent = 'Testing connection...';
+  if (!COMFY_SERVER_URL) { comfyStatusText.textContent = '❌ Paste your ngrok server URL first'; return; }
+  try {
+    const res = await fetch(`${COMFY_SERVER_URL}/system_stats`, {
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await res.json();
+    let msg = '✅ Connected to ComfyUI';
+    if (!COMFY_WORKFLOW_JSON) msg += ' — paste a workflow JSON above before generating';
+    else {
+      try { JSON.parse(COMFY_WORKFLOW_JSON); msg += ' — workflow JSON looks valid'; }
+      catch { msg = '⚠️ Connected, but the workflow JSON is not valid JSON'; }
+    }
+    comfyStatusText.textContent = msg;
+  } catch (err) {
+    comfyStatusText.textContent = `❌ Can't reach server. Make sure Colab is running and you relaunched ComfyUI with --enable-cors-header "*". (${err.message})`;
+  }
+});
 
 // Groq model picker
 document.getElementById('groqModelList').addEventListener('click', (e) => {
@@ -1932,6 +2185,10 @@ document.getElementById('attachUploadFile').addEventListener('click', () => {
   fileInput.removeAttribute('accept'); fileInput.click(); attachMenu.classList.remove('open');
 });
 document.getElementById('attachUploadImage').addEventListener('click', () => {
+  fileInput.setAttribute('accept', 'image/*'); fileInput.click(); attachMenu.classList.remove('open');
+});
+document.getElementById('attachGenerateVideo').addEventListener('click', () => {
+  videoGenPending = true;
   fileInput.setAttribute('accept', 'image/*'); fileInput.click(); attachMenu.classList.remove('open');
 });
 
