@@ -1288,27 +1288,7 @@
             outline-offset: 2px;
         }
 
-        /* ============================================================
-           12. STREAMING CURSOR
-           ============================================================ */
-        .streaming-cursor {
-            display: inline-block;
-            width: 2px;
-            height: 1.1em;
-            background: var(--accent);
-            margin-left: 2px;
-            vertical-align: text-bottom;
-            animation: blink 1s step-end infinite;
-        }
-        @keyframes blink {
-            0%,
-            100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0;
-            }
-        }
+        /* no streaming cursor needed anymore */
     </style>
 </head>
 <body>
@@ -1501,12 +1481,10 @@
         const db = firebase.firestore();
 
         // ================================================================
-        //  NEW CUSTOM BACKEND API
+        //  NEW CUSTOM BACKEND API (non-streaming)
         // ================================================================
         const API_BASE = "https://commerce-browse-rename.ngrok-free.dev/v1";
         const CHAT_ENDPOINT = `${API_BASE}/chat/completions`;
-
-        // optional: you can change the model name if your backend supports it
         const MODEL_NAME = "rextflex-model";
 
         // ================================================================
@@ -1518,7 +1496,7 @@
         let chatsListener = null;
         let selectedFiles = [];
         let generatedFiles = [];
-        let isStreaming = false;
+        let isSending = false;
 
         // ================================================================
         //  DOM REFS
@@ -1548,7 +1526,8 @@
         function setStatus(state, label) {
             statusDot.className = 'status-dot';
             if (state === 'online') { statusDot.classList.add('online');
-                statusLabel.textContent = label || 'Online'; } else if (state === 'offline') { statusDot.classList.add('offline');
+                statusLabel.textContent = label || 'Online'; } else if (state === 'offline') { statusDot.classList.add(
+                    'offline');
                 statusLabel.textContent = label || 'Offline'; } else { statusLabel.textContent = label || 'Connecting…'; }
         }
 
@@ -1558,8 +1537,6 @@
                 if (res.ok) { setStatus('online', 'Online'); } else { setStatus('offline', 'API error'); }
             } catch (_) { setStatus('offline', 'API unreachable'); }
         }
-
-        // ping on load and every 30s
         pingApi();
         setInterval(pingApi, 30000);
 
@@ -1604,7 +1581,6 @@
         filesPanelClose.onclick = closeFilesPanel;
         filesOverlay.onclick = closeFilesPanel;
 
-        // swipe to open/close files panel
         let filesTouchStartX = 0,
             filesTouchStartY = 0;
         chatContainer.addEventListener('touchstart', e => {
@@ -2136,12 +2112,12 @@
         }
 
         // ================================================================
-        //  SEND MESSAGE — NEW API
+        //  SEND MESSAGE — NON-STREAMING (instant full response)
         // ================================================================
         sendBtn.onclick = sendMessage;
 
         async function sendMessage() {
-            if (isStreaming) return;
+            if (isSending) return;
             const prompt = messageInput.value.trim();
             if ((!prompt && selectedFiles.length === 0) || !currentUser || !currentChatId) return;
 
@@ -2176,7 +2152,7 @@
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            isStreaming = true;
+            isSending = true;
 
             try {
                 // Build conversation history
@@ -2191,7 +2167,6 @@
                         content: data.content });
                 });
 
-                // Pop last user message (the one we just added) off history because it's sent as the current message
                 let finalUserText = prompt || '';
                 for (const f of filesToSend) {
                     if (f.type === 'text') {
@@ -2214,7 +2189,7 @@
                     { role: 'user', content: finalUserText }
                 ];
 
-                // ---- CALL NEW API WITH STREAMING ----
+                // ---- CALL API WITHOUT STREAMING ----
                 const resp = await fetch(CHAT_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2223,7 +2198,7 @@
                         messages: messages,
                         temperature: 0.3,
                         max_tokens: 2048,
-                        stream: true
+                        stream: false   // ← no streaming, full response at once
                     })
                 });
 
@@ -2232,98 +2207,28 @@
                     throw new Error(`API error ${resp.status}: ${errText}`);
                 }
 
-                if (!resp.body) {
-                    // fallback: non-streaming response
-                    const data = await resp.json();
-                    const reply = data?.choices?.[0]?.message?.content || '⚠️ Empty response from API.';
-                    await loadingRef.update({ content: reply, timestamp: firebase.firestore.FieldValue
-                            .serverTimestamp() });
-                    isStreaming = false;
-                    sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
-                    return;
-                }
+                const data = await resp.json();
+                const reply = data?.choices?.[0]?.message?.content;
+                if (!reply) throw new Error('Empty response from API.');
 
-                // ---- STREAM PROCESSING ----
-                const reader = resp.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let fullContent = '';
-                let buffer = '';
-
-                // Update the loading message to show streaming content
-                await loadingRef.update({ content: '…', timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-
-                let firstChunk = true;
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                        const payload = trimmed.slice(6);
-                        if (payload === '[DONE]') continue;
-
-                        try {
-                            const chunk = JSON.parse(payload);
-                            const delta = chunk?.choices?.[0]?.delta?.content;
-                            if (delta) {
-                                fullContent += delta;
-                                // Update Firestore doc with the accumulated content (throttled)
-                                if (firstChunk || fullContent.length % 30 === 0) {
-                                    await loadingRef.update({ content: fullContent });
-                                    firstChunk = false;
-                                }
-                                // Also update the DOM directly for a snappier feel
-                                const msgRows = chatContainer.querySelectorAll('.message-row.ai');
-                                if (msgRows.length > 0) {
-                                    const lastRow = msgRows[msgRows.length - 1];
-                                    const contentDiv = lastRow.querySelector('.msg-content.ai-text');
-                                    if (contentDiv) {
-                                        contentDiv.innerHTML = formatMarkdown(fullContent) +
-                                            '<span class="streaming-cursor"></span>';
-                                        chatContainer.scrollTop = chatContainer.scrollHeight;
-                                    }
-                                }
-                            }
-                        } catch (_) { /* ignore parse errors */ }
-                    }
-                }
-
-                // Final update
-                if (fullContent) {
-                    await loadingRef.update({ content: fullContent, timestamp: firebase.firestore.FieldValue
-                            .serverTimestamp() });
-                    // Remove cursor
-                    const msgRows = chatContainer.querySelectorAll('.message-row.ai');
-                    if (msgRows.length > 0) {
-                        const lastRow = msgRows[msgRows.length - 1];
-                        const contentDiv = lastRow.querySelector('.msg-content.ai-text');
-                        if (contentDiv) {
-                            contentDiv.innerHTML = formatMarkdown(fullContent);
-                        }
-                    }
-                } else {
-                    await loadingRef.update({ content: '⚠️ No response content received.' });
-                }
+                let finalReply = reply;
 
                 // Add download links for binary files if requested
                 const binaryFiles = filesToSend.filter(f => f.type === 'binary' && f.blobUrl);
                 if (binaryFiles.length > 0 && /download|link|url|bhejo|send|de do/i.test(prompt)) {
                     let linksBlock = '\n\n📎 Download Links:\n';
                     binaryFiles.forEach(f => { linksBlock += `• DOWNLOAD_LINK:${f.blobUrl}:${f.name}\n`; });
-                    await loadingRef.update({ content: fullContent + linksBlock });
+                    finalReply += linksBlock;
                 }
+
+                await loadingRef.update({ content: finalReply, timestamp: firebase.firestore.FieldValue
+                        .serverTimestamp() });
 
             } catch (err) {
                 await loadingRef.update({ content: `❌ Error: ${err.message}` });
             }
 
-            isStreaming = false;
+            isSending = false;
             sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
         }
 
@@ -2388,7 +2293,7 @@
         });
 
         // ================================================================
-        //  INIT: check API health once more after load
+        //  INIT
         // ================================================================
         window.addEventListener('load', () => {
             setTimeout(pingApi, 1000);
