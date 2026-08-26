@@ -1,1 +1,1362 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RextFlex AI — Local</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',system-ui; }
 
+/* ===== BODY & LAYOUT ===== */
+body {
+  background: #ffffff;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  color: #111111;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 260px;
+  background: #f7f7f8;
+  border-right: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+.sidebar-top {
+  padding: 16px 12px 10px;
+  border-bottom: 1px solid #e5e5e5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-logo {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  flex: 1;
+}
+.new-chat-btn {
+  background: none;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: 0.2s;
+}
+.new-chat-btn:hover { background: #ececec; }
+.chats-label {
+  padding: 14px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.chats-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+.chats-list::-webkit-scrollbar { width: 4px; }
+.chats-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+.chat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+  margin-bottom: 2px;
+  color: #111;
+}
+.chat-item:hover, .chat-item.active { background: #ebebeb; }
+.chat-item-title {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  color: #222;
+}
+.chat-delete {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: 0.15s;
+}
+.chat-item:hover .chat-delete { opacity: 1; }
+.chat-delete:hover { color: #e53e3e; background: #fee2e2; }
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid #e5e5e5;
+}
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.profile-row:hover { background: #ebebeb; }
+.profile-avatar {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 14px; font-weight: 600;
+  flex-shrink: 0;
+}
+.profile-name { font-size: 13px; font-weight: 500; color: #111; }
+.profile-email-small { font-size: 11px; color: #888; }
+
+/* ===== MAIN CHAT AREA ===== */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* ===== TOP BAR ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #ffffff;
+  gap: 12px;
+  min-height: 56px;
+}
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #555;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.hamburger:hover { background: #f0f0f0; }
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.model-selector:hover { background: #f5f5f5; }
+.model-dot { width: 8px; height: 8px; border-radius: 50%; background: #10a37f; }
+.topbar-spacer { flex: 1; }
+
+/* ===== MODEL DROPDOWN ===== */
+.model-dropdown-wrap { position: relative; }
+.model-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+  min-width: 260px;
+  z-index: 999;
+  padding: 8px;
+  animation: dropIn 0.18s ease;
+}
+@keyframes dropIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+.model-dropdown-menu.open { display: block; }
+.model-group-label {
+  font-size: 10px; font-weight: 700; color: #aaa;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  padding: 6px 10px 4px;
+}
+.model-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  cursor: pointer; transition: 0.15s;
+}
+.model-option:hover { background: #f5f5f5; }
+.model-option.selected { background: #f0fdf4; }
+.model-option-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.model-option-info { flex: 1; }
+.model-option-name { font-size: 14px; font-weight: 600; color: #111; }
+.model-option-desc { font-size: 11px; color: #888; margin-top: 1px; }
+.model-option-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 8px;
+  border-radius: 20px; background: #f0f0f0; color: #555;
+}
+.model-option-badge.new-badge { background: #f0fdf4; color: #16a34a; }
+.model-divider { border: none; border-top: 1px solid #f0f0f0; margin: 6px 4px; }
+/* Thinking toggle */
+.thinking-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-radius: 10px;
+}
+.thinking-label { font-size: 14px; font-weight: 600; color: #111; }
+.thinking-desc { font-size: 11px; color: #888; margin-top: 1px; }
+.toggle-switch {
+  position: relative; width: 42px; height: 24px;
+  background: #e0e0e0; border-radius: 12px; cursor: pointer;
+  transition: background 0.2s; flex-shrink: 0;
+}
+.toggle-switch.on { background: #10a37f; }
+.toggle-switch::after {
+  content: ''; position: absolute;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: white; top: 3px; left: 3px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.toggle-switch.on::after { transform: translateX(18px); }
+
+/* ===== CHAT MESSAGES ===== */
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #fff;
+}
+.chat-container::-webkit-scrollbar { width: 6px; }
+.chat-container::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 6px; }
+
+.message-row {
+  display: flex;
+  padding: 12px 20%;
+  gap: 14px;
+  animation: msgIn 0.25s ease;
+}
+@keyframes msgIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+.message-row.user { background: #fff; justify-content: flex-end; }
+.message-row.ai { background: #f9f9f9; justify-content: flex-start; }
+
+.msg-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.msg-avatar.user-av { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; }
+.msg-avatar.ai-av { background: #10a37f; color: white; font-size: 11px; }
+
+.msg-content {
+  flex: 1;
+  max-width: 680px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #111111;
+}
+.msg-content.user-text {
+  background: #f0f0f0;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 16px;
+  display: inline-block;
+  max-width: 75%;
+  color: #111;
+}
+.msg-content.ai-text { color: #111111; }
+.msg-content.ai-text p { margin-bottom: 10px; color: #111; }
+.msg-content.ai-text pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 13px;
+  margin: 10px 0;
+}
+.msg-content.ai-text code {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #333;
+}
+.attach-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #e8e8e8;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #444;
+  margin-top: 6px;
+}
+
+/* TYPING INDICATOR */
+.typing-dots span {
+  display: inline-block;
+  width: 7px; height: 7px;
+  background: #10a37f;
+  border-radius: 50%;
+  margin: 0 2px;
+  animation: bounce 1.2s infinite;
+  opacity: 0.6;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+/* ===== EMPTY STATE ===== */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+.empty-logo { font-size: 42px; margin-bottom: 16px; }
+.empty-title { font-size: 28px; font-weight: 600; color: #111; margin-bottom: 8px; }
+.empty-sub { font-size: 15px; color: #888; }
+
+/* ===== FILE PREVIEW CHIPS ===== */
+.file-preview-strip {
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 20%;
+  background: #fff;
+  border-top: 1px solid #eee;
+}
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0f0f0;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #333;
+}
+.chip-remove {
+  background: none; border: none;
+  color: #999; cursor: pointer;
+  font-size: 13px; line-height: 1;
+  padding: 0 2px;
+}
+.chip-remove:hover { color: #e53e3e; }
+
+/* ===== INPUT AREA with 3D Keyboard Style ===== */
+.input-area-wrapper {
+  padding: 12px 20%;
+  background: #fff;
+  border-top: 1px solid #e5e5e5;
+}
+.input-box {
+  display: flex;
+  align-items: flex-end;
+  background: #fff;
+  border: 1.5px solid #d9d9d9;
+  border-radius: 16px;
+  padding: 8px 12px;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-box:focus-within {
+  border-color: #111;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+.input-textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  color: #111;
+  resize: none;
+  max-height: 160px;
+  min-height: 24px;
+  line-height: 1.5;
+  padding: 4px 0;
+  font-family: 'Inter', system-ui;
+}
+.input-textarea::placeholder { color: #aaa; }
+
+/* 3D KEYBOARD BUTTONS */
+.kb-btn {
+  background: #f0f0f0;
+  border: 1px solid #c8c8c8;
+  border-bottom: 3px solid #b0b0b0;
+  border-radius: 8px;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  color: #444;
+  cursor: pointer;
+  transition: all 0.08s;
+  flex-shrink: 0;
+  user-select: none;
+}
+.kb-btn:hover {
+  background: #e8e8e8;
+  border-color: #bbb;
+  border-bottom-color: #999;
+}
+.kb-btn:active {
+  border-bottom-width: 1px;
+  transform: translateY(2px);
+  background: #e0e0e0;
+}
+.kb-btn.send-btn {
+  background: #111;
+  border-color: #000;
+  border-bottom-color: #000;
+  color: #fff;
+  width: 36px; height: 36px;
+}
+.kb-btn.send-btn:hover { background: #333; }
+.kb-btn.send-btn:disabled { background: #e0e0e0; border-color: #ccc; border-bottom-color: #bbb; color: #aaa; cursor: not-allowed; }
+.input-footer-note {
+  text-align: center;
+  font-size: 11px;
+  color: #bbb;
+  margin-top: 8px;
+}
+
+/* ===== MODALS ===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal-overlay.show { display: flex; }
+.modal-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 36px 32px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  color: #111;
+}
+.modal-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 20px; text-align: center; color: #111; }
+.field {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #111;
+  background: #fafafa;
+  outline: none;
+  margin-bottom: 10px;
+  transition: 0.2s;
+}
+.field:focus { border-color: #111; background: #fff; }
+.auth-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: 10px;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  transition: 0.2s;
+}
+.auth-btn.primary { background: #111; color: #fff; }
+.auth-btn.primary:hover { background: #333; }
+.auth-btn.google { background: #fff; color: #333; border: 1.5px solid #e0e0e0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.auth-btn.google:hover { background: #f5f5f5; }
+.auth-btn.danger { background: #fee2e2; color: #e53e3e; }
+.auth-btn.danger:hover { background: #fecaca; }
+.toggle-link { text-align: center; font-size: 13px; color: #888; margin-top: 8px; }
+.toggle-link span { color: #111; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.error-msg { color: #e53e3e; font-size: 13px; text-align: center; margin-top: 6px; min-height: 18px; }
+
+/* ===== PROFILE MODAL ===== */
+.profile-big-avatar {
+  width: 72px; height: 72px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; font-weight: 700; color: white;
+  margin: 0 auto 14px;
+}
+.profile-detail-name { font-size: 18px; font-weight: 600; text-align: center; color: #111; }
+.profile-detail-email { font-size: 13px; color: #888; text-align: center; margin-top: 4px; margin-bottom: 20px; }
+
+/* ===== MOBILE ===== */
+.mobile-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 500;
+}
+
+/* ===== GENERATED FILES PANEL (slides in from the right) ===== */
+.files-btn {
+  background: none; border: 1px solid #e0e0e0; border-radius: 8px;
+  padding: 6px 12px; font-size: 13px; color: #555; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: 0.15s;
+}
+.files-btn:hover { background: #f5f5f5; }
+.files-badge {
+  background: #4f46e5; color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: 10px; min-width: 16px; height: 16px; padding: 0 4px;
+  display: none; align-items: center; justify-content: center;
+}
+.files-badge.show { display: flex; }
+.files-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4); z-index: 690;
+}
+.files-overlay.show { display: block; }
+.files-panel {
+  position: fixed; top: 0; right: 0; height: 100vh; width: 320px;
+  background: #f7f7f8; border-left: 1px solid #e5e5e5;
+  display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform 0.3s ease;
+  z-index: 700;
+}
+.files-panel.open { transform: translateX(0); }
+.files-panel-header {
+  padding: 16px 14px; border-bottom: 1px solid #e5e5e5;
+  display: flex; align-items: center; gap: 8px;
+}
+.files-panel-title { font-size: 15px; font-weight: 700; color: #111; flex: 1; }
+.files-panel-close {
+  background: none; border: none; font-size: 16px; color: #888; cursor: pointer;
+  padding: 4px 8px; border-radius: 6px;
+}
+.files-panel-close:hover { background: #eee; }
+.files-panel-list { flex: 1; overflow-y: auto; padding: 10px; }
+.files-empty { color: #bbb; font-size: 13px; text-align: center; padding: 30px 12px; }
+.file-card {
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.file-card-name { font-size: 13px; font-weight: 600; color: #111; word-break: break-all; }
+.file-card-meta { font-size: 11px; color: #999; margin: 2px 0 8px; }
+.file-card-dl {
+  background: #111; color: #fff; border: none; border-radius: 7px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.file-card-dl:hover { background: #333; }
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    z-index: 600;
+    transform: translateX(-100%);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .mobile-overlay.show { display: block; }
+  .hamburger { display: flex; }
+  .message-row { padding: 10px 16px; }
+  .input-area-wrapper { padding: 10px 12px; }
+  .file-preview-strip { padding: 6px 12px; }
+  .empty-title { font-size: 22px; }
+  .files-panel { width: 85%; }
+  .files-btn span.files-btn-label { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <span class="sidebar-logo">✦ RextFlex AI</span>
+    <button class="new-chat-btn" id="newChatBtn"><i class="fas fa-plus"></i> New</button>
+  </div>
+  <div class="chats-label">Recent Chats</div>
+  <div class="chats-list" id="chatsList">
+    <div style="color:#bbb; font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="profile-row" id="profileRowBtn">
+      <div class="profile-avatar" id="sidebarAvatar">?</div>
+      <div>
+        <div class="profile-name" id="sidebarName">Guest</div>
+        <div class="profile-email-small" id="sidebarEmail">Not signed in</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mobile-overlay" id="mobileOverlay"></div>
+
+<!-- GENERATED FILES PANEL -->
+<div class="files-overlay" id="filesOverlay"></div>
+<div class="files-panel" id="filesPanel">
+  <div class="files-panel-header">
+    <i class="fas fa-folder-open" style="color:#4f46e5;"></i>
+    <span class="files-panel-title">Generated Files</span>
+    <button class="files-panel-close" id="filesPanelClose"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="files-panel-list" id="filesPanelList">
+    <div class="files-empty" id="filesEmptyMsg">No files yet — ask RextFlex AI to generate some code and it'll show up here.</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <button class="hamburger" id="hamburgerBtn"><i class="fas fa-bars"></i></button>
+    <div class="model-dropdown-wrap">
+      <button class="model-selector" id="modelSelectorBtn">
+        <span class="model-dot" id="modelDot" style="background:#f59e0b;"></span>
+        <span id="modelBadgeText">Qwen2.5-Coder (Local)</span>
+        <i class="fas fa-chevron-down" style="font-size:10px; color:#aaa;" id="modelChevron"></i>
+      </button>
+      <div class="model-dropdown-menu" id="modelDropdown">
+        <div class="model-group-label">Local Model — Kaggle + ngrok</div>
+        <div style="padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <label style="font-size:11px; font-weight:600; color:#888; display:block; margin-bottom:4px;">Ngrok URL (Kaggle restart hote hi yaha update karo)</label>
+            <input type="text" id="localApiUrlInput" value="https://commerce-browse-rename.ngrok-free.dev/v1"
+              style="width:100%; padding:8px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12.5px; font-family:monospace; color:#111;">
+          </div>
+          <button id="saveLocalUrlBtn"
+            style="background:#111; color:#fff; border:none; border-radius:8px; padding:9px; font-size:13px; font-weight:600; cursor:pointer;">
+            Save &amp; Test Connection
+          </button>
+          <div id="localStatusText" style="font-size:11.5px; color:#888;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="files-btn" id="filesBtn" title="Generated files">
+      <i class="fas fa-folder-open"></i> <span class="files-btn-label">Files</span>
+      <span class="files-badge" id="filesBadge">0</span>
+    </button>
+  </div>
+
+  <!-- MESSAGES or EMPTY STATE -->
+  <div class="chat-container" id="chatContainer">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-logo">✦</div>
+      <div class="empty-title">RextFlex AI</div>
+      <div class="empty-sub">Powered by your local AI • Ask anything</div>
+    </div>
+  </div>
+
+  <!-- FILE PREVIEW STRIP -->
+  <div class="file-preview-strip" id="filePreviewStrip"></div>
+
+  <!-- INPUT AREA -->
+  <div class="input-area-wrapper">
+    <div class="input-box">
+      <!-- File Attach -->
+      <label style="cursor:pointer;">
+        <div class="kb-btn" title="Attach file"><i class="fas fa-paperclip"></i></div>
+        <input type="file" id="fileInput" multiple style="display:none;">
+      </label>
+
+      <!-- Text Input -->
+      <textarea
+        class="input-textarea"
+        id="messageInput"
+        placeholder="Message RextFlex AI..."
+        rows="1"
+        autocomplete="off"
+      ></textarea>
+
+      <!-- Send Button -->
+      <button class="kb-btn send-btn" id="sendBtn" disabled title="Send">
+        <i class="fas fa-arrow-up"></i>
+      </button>
+    </div>
+    <div class="input-footer-note">RextFlex AI may make mistakes. Check important info.</div>
+  </div>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="modal-overlay show" id="loginModal">
+  <div class="modal-card">
+    <!-- Login Form -->
+    <div id="loginFormDiv">
+      <h2>✦ RextFlex AI</h2>
+      <input type="email" class="field" id="loginEmail" placeholder="Email address">
+      <input type="password" class="field" id="loginPassword" placeholder="Password">
+      <button class="auth-btn primary" id="loginBtn">Sign In</button>
+      <button class="auth-btn google" id="googleLoginBtn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
+      </button>
+      <div class="error-msg" id="loginError"></div>
+      <div class="toggle-link">Don't have an account? <span id="showSignup">Sign Up</span></div>
+    </div>
+    <!-- Signup Form -->
+    <div id="signupFormDiv" style="display:none;">
+      <h2>✦ Create Account</h2>
+      <input type="text" class="field" id="signupName" placeholder="Full Name">
+      <input type="email" class="field" id="signupEmail" placeholder="Email address">
+      <input type="password" class="field" id="signupPassword" placeholder="Password">
+      <input type="password" class="field" id="signupConfirm" placeholder="Confirm Password">
+      <button class="auth-btn primary" id="signupBtn">Create Account</button>
+      <button class="auth-btn google" id="googleSignupBtn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"> Continue with Google
+      </button>
+      <div class="error-msg" id="signupError"></div>
+      <div class="toggle-link">Already have account? <span id="showLogin">Sign In</span></div>
+    </div>
+    <!-- Verify Email -->
+    <div id="verifyDiv" style="display:none;">
+      <h2>✉️ Verify Email</h2>
+      <p style="text-align:center; color:#666; font-size:14px; margin-bottom:20px;">We sent a verification link to your email. Please verify and log in.</p>
+      <button class="auth-btn primary" id="backToLoginBtn">Back to Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal-card">
+    <div class="profile-big-avatar" id="bigAvatar">U</div>
+    <div class="profile-detail-name" id="profileName">User</div>
+    <div class="profile-detail-email" id="profileEmail">email</div>
+    <button class="auth-btn primary" id="closeProfileBtn">Close</button>
+    <button class="auth-btn danger" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+  </div>
+</div>
+
+<script>
+// ==================== FIREBASE ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyCejPzkVeajGbTVMDfJcfDKfT66w0IeGRE",
+  authDomain: "rextflex-ai.firebaseapp.com",
+  databaseURL: "https://rextflex-ai-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "rextflex-ai",
+  storageBucket: "rextflex-ai.firebasestorage.app",
+  messagingSenderId: "423146133124",
+  appId: "1:423146133124:web:70f9dbae4fa76d3b1654d1"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ==================== LOCAL MODEL CONNECTION (Kaggle + ngrok) ====================
+// Ye Kaggle T4 par chal rahe llama-cpp-python server (Qwen2.5-Coder-14B) se baat karta hai,
+// ngrok tunnel ke through. Free ngrok ka URL Kaggle restart hote hi BADAL jaata hai — naya
+// link mile toh yaha ya upar model dropdown me jaake "Save & Test Connection" se update kar dena.
+let LOCAL_API_URL = localStorage.getItem('rextflex_local_api_url') || "https://commerce-browse-rename.ngrok-free.dev/v1";
+const LOCAL_MODEL_LABEL = "qwen2.5-coder-14b-instruct";
+// ngrok free tier browser requests par ek warning page dikhata hai jab tak ye header na ho.
+const NGROK_HEADER = { 'ngrok-skip-browser-warning': 'true' };
+
+// ==================== STATE ====================
+let currentUser = null;
+let currentChatId = null;
+let messagesListener = null;
+let chatsListener = null;
+let selectedFiles = [];
+
+// ==================== DOM ====================
+const chatContainer = document.getElementById('chatContainer');
+const emptyState = document.getElementById('emptyState');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const fileInput = document.getElementById('fileInput');
+const filePreviewStrip = document.getElementById('filePreviewStrip');
+const chatsList = document.getElementById('chatsList');
+const sidebar = document.getElementById('sidebar');
+const mobileOverlay = document.getElementById('mobileOverlay');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+const loginModal = document.getElementById('loginModal');
+const profileModal = document.getElementById('profileModal');
+
+// ==================== AUTO RESIZE TEXTAREA ====================
+messageInput.addEventListener('input', () => {
+  messageInput.style.height = 'auto';
+  messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
+  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
+});
+messageInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// ==================== SIDEBAR TOGGLE ====================
+hamburgerBtn.onclick = () => { sidebar.classList.add('open'); mobileOverlay.classList.add('show'); };
+mobileOverlay.onclick = () => { sidebar.classList.remove('open'); mobileOverlay.classList.remove('show'); };
+
+// ==================== GENERATED FILES PANEL ====================
+let generatedFiles = [];
+const filesBtn = document.getElementById('filesBtn');
+const filesPanel = document.getElementById('filesPanel');
+const filesOverlay = document.getElementById('filesOverlay');
+const filesPanelClose = document.getElementById('filesPanelClose');
+const filesPanelList = document.getElementById('filesPanelList');
+const filesEmptyMsg = document.getElementById('filesEmptyMsg');
+const filesBadge = document.getElementById('filesBadge');
+
+function openFilesPanel() { filesPanel.classList.add('open'); filesOverlay.classList.add('show'); }
+function closeFilesPanel() { filesPanel.classList.remove('open'); filesOverlay.classList.remove('show'); }
+filesBtn.onclick = openFilesPanel;
+filesPanelClose.onclick = closeFilesPanel;
+filesOverlay.onclick = closeFilesPanel;
+
+// Swipe gesture on the chat area: swipe leftwards (finger moves right->left)
+// pulls the Files panel in from the right edge; swipe the other way closes it.
+let filesTouchStartX = 0, filesTouchStartY = 0;
+chatContainer.addEventListener('touchstart', e => {
+  filesTouchStartX = e.touches[0].clientX;
+  filesTouchStartY = e.touches[0].clientY;
+}, { passive: true });
+chatContainer.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - filesTouchStartX;
+  const dy = e.changedTouches[0].clientY - filesTouchStartY;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0) openFilesPanel(); else closeFilesPanel();
+  }
+}, { passive: true });
+
+// Pull filename + language + code out of fenced code blocks in an AI reply.
+// If the model puts a filename comment on the first line (e.g. "# app.py" or
+// "// script.js"), that name is used; otherwise a generic name is generated.
+function extractCodeBlocks(text, msgId) {
+  const files = [];
+  const extMap = { python:'py', py:'py', javascript:'js', js:'js', jsx:'jsx', html:'html',
+    css:'css', json:'json', java:'java', c:'c', cpp:'cpp', 'c++':'cpp', bash:'sh', sh:'sh',
+    shell:'sh', xml:'xml', yaml:'yml', yml:'yml', sql:'sql', typescript:'ts', ts:'ts',
+    kotlin:'kt', swift:'swift', go:'go', rust:'rs', php:'php', ruby:'rb' };
+  const regex = /```(\w*)\n([\s\S]*?)```/g;
+  let m, idx = 0;
+  while ((m = regex.exec(text)) !== null) {
+    const lang = (m[1] || '').trim().toLowerCase();
+    let code = m[2];
+    const ext = extMap[lang] || (lang || 'txt');
+    const lines = code.split('\n');
+    const hintMatch = lines[0].trim().match(/^(?:#|\/\/|<!--)\s*([\w.\-]+\.\w+)/);
+    idx++;
+    let name;
+    if (hintMatch) { name = hintMatch[1]; code = lines.slice(1).join('\n'); }
+    else { name = `generated_${idx}.${ext}`; }
+    if (code.trim()) files.push({ id: `${msgId}_${idx}`, name, content: code.trim(), lang: ext || 'txt' });
+  }
+  return files;
+}
+
+function downloadFile(name, content) {
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function renderFilesPanel() {
+  filesBadge.textContent = generatedFiles.length;
+  filesBadge.classList.toggle('show', generatedFiles.length > 0);
+  filesPanelList.innerHTML = '';
+  if (generatedFiles.length === 0) {
+    filesPanelList.appendChild(filesEmptyMsg);
+    return;
+  }
+  generatedFiles.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = `<div class="file-card-name">${escapeHtml(f.name)}</div>
+      <div class="file-card-meta">${f.lang.toUpperCase()} • ${formatSize(new Blob([f.content]).size)}</div>
+      <button class="file-card-dl"><i class="fas fa-download"></i> Download</button>`;
+    card.querySelector('.file-card-dl').onclick = () => downloadFile(f.name, f.content);
+    filesPanelList.appendChild(card);
+  });
+}
+newChatBtn.onclick = () => { if(currentUser) createNewChat(); };
+document.getElementById('profileRowBtn').onclick = () => {
+  if(currentUser) { updateProfileModal(); profileModal.classList.add('show'); }
+  else loginModal.classList.add('show');
+};
+
+// ==================== FILE ATTACH ====================
+fileInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  const textExts = ['js','html','htm','txt','css','py','json','ts','jsx','tsx','md','xml','csv','yaml','yml','sh','php','java','cpp','c','h'];
+  for (const file of files) {
+    const isText = file.type.startsWith('text/') || textExts.some(ext => file.name.toLowerCase().endsWith('.'+ext));
+    if (isText) {
+      const text = await file.text();
+      selectedFiles.push({ name: file.name, type: 'text', content: text.substring(0, 15000), size: file.size });
+      updateFilePreview();
+    } else {
+      // zip/binary: store blob URL for download links
+      const blobUrl = URL.createObjectURL(file);
+      selectedFiles.push({ name: file.name, type: 'binary', blobUrl, size: file.size });
+      updateFilePreview();
+    }
+  }
+  fileInput.value = '';
+  sendBtn.disabled = messageInput.value.trim() === '' && selectedFiles.length === 0;
+});
+
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + 'KB';
+  return (bytes/(1024*1024)).toFixed(1) + 'MB';
+}
+
+function updateFilePreview() {
+  filePreviewStrip.innerHTML = '';
+  if (selectedFiles.length === 0) { filePreviewStrip.style.display = 'none'; return; }
+  filePreviewStrip.style.display = 'flex';
+  selectedFiles.forEach((f, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    const icon = f.type === 'binary' ? 'fa-file-zipper' : 'fa-file-code';
+    const dlLink = f.type === 'binary' && f.blobUrl
+      ? ` <a href="${f.blobUrl}" download="${f.name}" style="color:#4f46e5;text-decoration:none;" title="Download"><i class="fas fa-download"></i></a>`
+      : '';
+    chip.innerHTML = `<i class="fas ${icon}" style="color:#888;"></i> ${f.name.substring(0,22)} <span style="color:#999;font-size:11px;">(${formatSize(f.size)})</span>${dlLink}<button class="chip-remove" data-idx="${idx}">✕</button>`;
+    chip.querySelector('.chip-remove').onclick = () => { selectedFiles.splice(idx, 1); updateFilePreview(); };
+    filePreviewStrip.appendChild(chip);
+  });
+}
+
+// ==================== AUTH ====================
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    if (user.emailVerified || user.providerData[0]?.providerId === 'google.com') {
+      currentUser = user;
+      loginModal.classList.remove('show');
+      updateSidebarProfile();
+      await loadUserChats();
+      if (!currentChatId) await createNewChat();
+      else loadMessages(currentChatId);
+    } else {
+      await auth.signOut();
+      loginModal.classList.add('show');
+      document.getElementById('loginError').textContent = '❌ Please verify your email first.';
+    }
+  } else {
+    currentUser = null; currentChatId = null;
+    loginModal.classList.add('show');
+    chatContainer.innerHTML = '';
+    chatContainer.appendChild(emptyState);
+    emptyState.style.display = 'flex';
+    if (messagesListener) messagesListener();
+    if (chatsListener) chatsListener();
+  }
+});
+
+function updateSidebarProfile() {
+  if (!currentUser) return;
+  const initial = (currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase();
+  document.getElementById('sidebarAvatar').textContent = initial;
+  document.getElementById('sidebarName').textContent = currentUser.displayName || 'User';
+  document.getElementById('sidebarEmail').textContent = currentUser.email || '';
+}
+
+function updateProfileModal() {
+  if (!currentUser) return;
+  const initial = (currentUser.displayName || 'U').charAt(0).toUpperCase();
+  document.getElementById('bigAvatar').textContent = initial;
+  document.getElementById('profileName').textContent = currentUser.displayName || 'User';
+  document.getElementById('profileEmail').textContent = currentUser.email || '';
+}
+
+// Login
+document.getElementById('loginBtn').onclick = async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pwd = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try {
+    const cred = await auth.signInWithEmailAndPassword(email, pwd);
+    if (!cred.user.emailVerified && cred.user.providerData[0]?.providerId !== 'google.com') {
+      await auth.signOut(); errEl.textContent = '❌ Verify email first.';
+    }
+  } catch(e) {
+    errEl.textContent = e.code === 'auth/user-not-found' ? '❌ Email not found' : e.code === 'auth/wrong-password' ? '❌ Wrong password' : '❌ ' + e.message;
+  }
+};
+
+// Signup
+document.getElementById('signupBtn').onclick = async () => {
+  const name = document.getElementById('signupName').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const pwd = document.getElementById('signupPassword').value;
+  const confirm = document.getElementById('signupConfirm').value;
+  const errEl = document.getElementById('signupError');
+  errEl.textContent = '';
+  if (pwd !== confirm) { errEl.textContent = '❌ Passwords do not match'; return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pwd);
+    await cred.user.updateProfile({ displayName: name });
+    await cred.user.sendEmailVerification();
+    await auth.signOut();
+    document.getElementById('signupFormDiv').style.display = 'none';
+    document.getElementById('verifyDiv').style.display = 'block';
+  } catch(e) { errEl.textContent = '❌ ' + e.message; }
+};
+
+// Google
+const googleSign = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+document.getElementById('googleLoginBtn').onclick = googleSign;
+document.getElementById('googleSignupBtn').onclick = googleSign;
+
+// Toggle forms
+document.getElementById('showSignup').onclick = () => {
+  document.getElementById('loginFormDiv').style.display = 'none';
+  document.getElementById('signupFormDiv').style.display = 'block';
+};
+document.getElementById('showLogin').onclick = () => {
+  document.getElementById('signupFormDiv').style.display = 'none';
+  document.getElementById('loginFormDiv').style.display = 'block';
+};
+document.getElementById('backToLoginBtn').onclick = () => {
+  document.getElementById('verifyDiv').style.display = 'none';
+  document.getElementById('loginFormDiv').style.display = 'block';
+};
+
+// Profile modal close/logout
+document.getElementById('closeProfileBtn').onclick = () => profileModal.classList.remove('show');
+document.getElementById('logoutBtn').onclick = () => { auth.signOut(); profileModal.classList.remove('show'); };
+
+// Close modals on overlay click
+[loginModal, profileModal].forEach(m => { m.addEventListener('click', e => { if(e.target === m) m.classList.remove('show'); }); });
+
+// ==================== CHAT FUNCTIONS ====================
+async function loadUserChats() {
+  if (!currentUser) return;
+  if (chatsListener) chatsListener();
+  chatsListener = db.collection('chats')
+    .where('userId', '==', currentUser.uid)
+    .orderBy('updatedAt', 'desc')
+    .onSnapshot(snapshot => {
+      const chats = [];
+      snapshot.forEach(doc => chats.push({ id: doc.id, ...doc.data() }));
+      renderChatsList(chats);
+    });
+}
+
+function renderChatsList(chats) {
+  chatsList.innerHTML = '';
+  if (chats.length === 0) {
+    chatsList.innerHTML = '<div style="color:#bbb; font-size:13px; text-align:center; padding:20px 0;">No chats yet</div>';
+    return;
+  }
+  chats.forEach(chat => {
+    const div = document.createElement('div');
+    div.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
+    div.dataset.id = chat.id;
+    div.innerHTML = `<div class="chat-item-title">${escapeHtml(chat.title || 'New chat')}</div>
+      <button class="chat-delete" data-id="${chat.id}" title="Delete"><i class="fas fa-trash-alt"></i></button>`;
+    div.addEventListener('click', (e) => { if (!e.target.closest('.chat-delete')) switchChat(chat.id); });
+    chatsList.appendChild(div);
+  });
+  document.querySelectorAll('.chat-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (confirm('Delete this chat?')) {
+        const msgs = await db.collection('chats').doc(id).collection('messages').get();
+        msgs.forEach(d => d.ref.delete());
+        await db.collection('chats').doc(id).delete();
+        if (currentChatId === id) { currentChatId = null; chatContainer.innerHTML = ''; chatContainer.appendChild(emptyState); emptyState.style.display='flex'; await createNewChat(); }
+      }
+    });
+  });
+}
+
+async function createNewChat() {
+  if (!currentUser) return;
+  const ref = await db.collection('chats').add({
+    userId: currentUser.uid, title: 'New chat',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  currentChatId = ref.id;
+  loadMessages(currentChatId);
+  sidebar.classList.remove('open'); mobileOverlay.classList.remove('show');
+}
+
+function switchChat(chatId) {
+  currentChatId = chatId;
+  loadMessages(chatId);
+  sidebar.classList.remove('open'); mobileOverlay.classList.remove('show');
+  document.querySelectorAll('.chat-item').forEach(el => el.classList.toggle('active', el.dataset.id === chatId));
+}
+
+function loadMessages(chatId) {
+  if (messagesListener) messagesListener();
+  emptyState.style.display = 'none';
+  messagesListener = db.collection('chats').doc(chatId).collection('messages')
+    .orderBy('timestamp', 'asc')
+    .onSnapshot(snapshot => {
+      chatContainer.innerHTML = '';
+      generatedFiles = [];
+      if (snapshot.empty) { chatContainer.appendChild(emptyState); emptyState.style.display = 'flex'; renderFilesPanel(); return; }
+      emptyState.style.display = 'none';
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        displayMessage(data);
+        if (data.role === 'ai' && data.content && !data.content.includes('🤖')) {
+          extractCodeBlocks(data.content, doc.id).forEach(f => generatedFiles.push(f));
+        }
+      });
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      renderFilesPanel();
+    });
+}
+
+function displayMessage(msg) {
+  const row = document.createElement('div');
+  row.className = `message-row ${msg.role === 'user' ? 'user' : 'ai'}`;
+  const isUser = msg.role === 'user';
+  const initial = isUser
+    ? (currentUser?.displayName || 'U').charAt(0).toUpperCase()
+    : 'R';
+  if (!isUser) {
+    const av = document.createElement('div');
+    av.className = 'msg-avatar ai-av';
+    av.textContent = 'R';
+    row.appendChild(av);
+  }
+  const content = document.createElement('div');
+  content.className = `msg-content ${isUser ? 'user-text' : 'ai-text'}`;
+  if (isUser) {
+    content.textContent = msg.content || '';
+    if (msg.attachments && msg.attachments.length) {
+      msg.attachments.forEach(a => {
+        const pill = document.createElement('div');
+        pill.className = 'attach-pill';
+        pill.innerHTML = `<i class="fas fa-paperclip"></i> ${escapeHtml(a.name)}`;
+        content.appendChild(pill);
+      });
+    }
+  } else {
+    if (msg.content === '🤖 RextFlex thinking...') {
+      content.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+    } else {
+      content.innerHTML = formatMarkdown(msg.content || '...');
+    }
+  }
+  if (isUser) {
+    const av = document.createElement('div');
+    av.className = 'msg-avatar user-av';
+    av.textContent = initial;
+    row.appendChild(content);
+    row.appendChild(av);
+  } else {
+    row.appendChild(content);
+  }
+  chatContainer.appendChild(row);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function formatMarkdown(text) {
+  // Render download link tokens: DOWNLOAD_LINK:bloburl:filename
+  text = text.replace(/DOWNLOAD_LINK:(blob:[^:]+):([^\n]+)/g, (_, url, name) => {
+    return `<a href="${url}" download="${name.trim()}" style="display:inline-flex;align-items:center;gap:6px;background:#f0f0f0;border:1px solid #ddd;border-radius:20px;padding:6px 14px;color:#111;text-decoration:none;font-size:13px;margin:4px 0;"><i class='fas fa-download' style='color:#4f46e5;'></i> Download ${name.trim()}</a>`;
+  });
+  let html = text
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" style="color:#4f46e5;">$1</a>')
+    .replace(/\n/g, '<br>');
+  return html;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+
+// ==================== SEND MESSAGE ====================
+sendBtn.onclick = sendMessage;
+
+async function sendMessage() {
+  const prompt = messageInput.value.trim();
+  if ((!prompt && selectedFiles.length === 0) || !currentUser || !currentChatId) return;
+  const filesToSend = [...selectedFiles];
+  messageInput.value = '';
+  messageInput.style.height = 'auto';
+  sendBtn.disabled = true;
+  selectedFiles = [];
+  updateFilePreview();
+
+  await db.collection('chats').doc(currentChatId).collection('messages').add({
+    role: 'user', content: prompt || '📎 Files attached',
+    attachments: filesToSend.map(f => ({ name: f.name })),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  const chatSnap = await db.collection('chats').doc(currentChatId).get();
+  if (chatSnap.exists && chatSnap.data().title === 'New chat' && prompt) {
+    await db.collection('chats').doc(currentChatId).update({ title: prompt.substring(0, 40), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } else {
+    await db.collection('chats').doc(currentChatId).update({ updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  }
+
+  const loadingRef = await db.collection('chats').doc(currentChatId).collection('messages').add({
+    role: 'ai', content: '🤖 RextFlex thinking...', timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  try {
+    let aiReply = await callLocalModel(currentChatId, prompt, filesToSend);
+    // Inject real download links for binary files if user asked
+    const binaryFiles = filesToSend.filter(f => f.type === 'binary' && f.blobUrl);
+    if (binaryFiles.length > 0 && /download|link|url|bhejo|send|de do/i.test(prompt)) {
+      let linksBlock = '\n\n📎 Download Links (click to download):\n';
+      binaryFiles.forEach(f => { linksBlock += `• DOWNLOAD_LINK:${f.blobUrl}:${f.name}\n`; });
+      aiReply += linksBlock;
+    }
+    await loadingRef.update({ content: aiReply, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch(e) {
+    await loadingRef.update({ content: `❌ Error: ${e.message}` });
+  }
+}
+
+// ==================== LOCAL MODEL API CALL (Kaggle + ngrok, OpenAI-compatible) ====================
+async function callLocalModel(chatId, userPrompt, attachedFiles) {
+  const snapshot = await db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc').get();
+  let history = [];
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.role === 'user') history.push({ role: 'user', content: data.content });
+    else if (data.role === 'ai' && data.content && !data.content.includes('🤖')) history.push({ role: 'assistant', content: data.content });
+  });
+
+  let finalUserText = userPrompt || '';
+  for (const f of attachedFiles) {
+    if (f.type === 'text') {
+      finalUserText += `\n\n[File: ${f.name} (${formatSize(f.size)})\nContent:\n${f.content}]`;
+    } else {
+      finalUserText += `\n\n[Binary/Zip file: ${f.name} (${formatSize(f.size)}). Cannot read contents directly. If user asks for a download link, say the file is available as a local blob URL and guide them.]`;
+    }
+  }
+  // The last entry is the current user turn we just wrote to Firestore -- replace it with
+  // the version that has file contents appended, so the model actually sees the files.
+  if (history.length > 0 && history[history.length - 1].role === 'user') {
+    history.pop();
+  }
+  history.push({ role: 'user', content: finalUserText });
+
+  const systemInstruction = "You are RextFlex AI, a helpful coding assistant powered by a locally-hosted Qwen2.5-Coder model running on the user's own Kaggle GPU. Always identify as RextFlex AI. The full conversation history is included in the messages above this one — you DO have access to everything the user said earlier in this chat. When asked what was said previously, look back at the actual messages and answer directly; never claim you lack memory of this conversation. Whenever you write code, put the filename as a comment on the very first line inside the code block (e.g. # app.py or // script.js) so it can be saved as a real file. Answer helpfully in the user's language. Be concise and clear.";
+
+  const messages = [{ role: 'system', content: systemInstruction }, ...history];
+  const endpoint = LOCAL_API_URL.replace(/\/$/, '') + '/chat/completions';
+
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...NGROK_HEADER },
+      body: JSON.stringify({
+        model: LOCAL_MODEL_LABEL,
+        messages,
+        temperature: 0.4,
+        max_tokens: 1536,
+      }),
+    });
+  } catch (netErr) {
+    throw new Error(`Local server tak connect nahi ho paya. Kaggle notebook chal raha hai? Ngrok link change toh nahi hua? (${netErr.message})`);
+  }
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const errJson = await res.json(); msg = errJson.error?.message || errJson.detail || msg; } catch (e) {}
+    throw new Error(`Local model call fail: ${msg}. URL check karo — model dropdown me naya ngrok link daalo agar Kaggle restart hua hai.`);
+  }
+
+  const data = await res.json();
+  const reply = data.choices?.[0]?.message?.content?.trim();
+  if (!reply) throw new Error('Local model se khaali jawaab mila.');
+  return reply;
+}
+
+// ==================== SETTINGS DROPDOWN JS ====================
+const modelSelectorBtn = document.getElementById('modelSelectorBtn');
+const modelDropdown = document.getElementById('modelDropdown');
+const localApiUrlInput = document.getElementById('localApiUrlInput');
+const localStatusText = document.getElementById('localStatusText');
+localApiUrlInput.value = LOCAL_API_URL;
+
+modelSelectorBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  modelDropdown.classList.toggle('open');
+  document.getElementById('modelChevron').style.transform = modelDropdown.classList.contains('open') ? 'rotate(180deg)' : '';
+});
+
+document.addEventListener('click', () => {
+  modelDropdown.classList.remove('open');
+  document.getElementById('modelChevron').style.transform = '';
+});
+
+modelDropdown.addEventListener('click', e => e.stopPropagation());
+
+// Save & test the local (Kaggle + ngrok) connection
+document.getElementById('saveLocalUrlBtn').addEventListener('click', async () => {
+  LOCAL_API_URL = localApiUrlInput.value.trim().replace(/\/$/, '');
+  localStorage.setItem('rextflex_local_api_url', LOCAL_API_URL);
+  document.getElementById('modelBadgeText').textContent = 'Qwen2.5-Coder (Local)';
+
+  localStatusText.textContent = 'Testing connection...';
+  document.getElementById('modelDot').style.background = '#f59e0b';
+  try {
+    const res = await fetch(LOCAL_API_URL + '/models', { headers: NGROK_HEADER });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    localStatusText.textContent = '✅ Connected';
+    document.getElementById('modelDot').style.background = '#10a37f';
+  } catch (err) {
+    localStatusText.textContent = '❌ ' + err.message + ' — Kaggle chal raha hai ya nahi check karo, ya naya ngrok link daalo.';
+    document.getElementById('modelDot').style.background = '#e53e3e';
+  }
+});
+
+// Test the default connection once on load
+window.addEventListener('load', () => {
+  document.getElementById('saveLocalUrlBtn').click();
+});
+
+</script>
+</body>
+</html>
