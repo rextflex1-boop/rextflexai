@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { CheckIcon, DownloadIcon, ExternalLinkIcon, FileIcon, GlobeIcon, ImageIcon, LoaderIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, ExternalLinkIcon, FileIcon, GlobeIcon, ImageIcon, LoaderIcon, PencilIcon } from "lucide-react";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -60,6 +60,7 @@ export function ChatMessage({
 }: {
   readonly isStreaming: boolean;
   readonly message: UIMessage;
+  readonly onEdit?: () => void;
 }) {
   const lastTextIndex = message.parts.reduce(
     (last, part, index) => (part.type === "text" ? index : last),
@@ -77,6 +78,16 @@ export function ChatMessage({
           />
         ))}
       </MessageContent>
+      {message.role === "user" && onEdit ? (
+        <button
+          aria-label="Edit and resend message"
+          className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
+          onClick={onEdit}
+          type="button"
+        >
+          <PencilIcon className="size-3" /> Edit
+        </button>
+      ) : null}
     </Message>
   );
 }

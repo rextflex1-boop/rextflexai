@@ -76,3 +76,10 @@ npm run dev
 `http://localhost:3000` khol lo. Google login local pe test karne ke liye
 `http://localhost:3000/api/auth/callback/google` bhi Google Console mein add
 karna hoga.
+
+
+## RextFlex AI feature pack
+
+This build keeps the existing Groq + E2B architecture intact and adds: real Stop Response aborting, temporary chats, Markdown/JSON export, pin/favorite chat controls, improved chat search/sorting, global drag-and-drop attachments, edit & resend for user messages, saved prompts, local usage stats, theme controls, personas/tone presets, web search and thinking toggles, share/rename/delete, and responsive mobile/PWA behavior.
+
+Run `db/schema.sql` after pulling this version so the chat session pin/favorite columns are present. No Gemini or NVIDIA credentials are required.

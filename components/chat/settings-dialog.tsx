@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusIcon, XIcon } from "lucide-react";
+import { CopyIcon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,9 @@ export function SettingsDialog({
   const [tone, setTone] = useState("");
   const [savedTone, setSavedTone] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [savedPrompts, setSavedPrompts] = useState<string[]>([]);
+  const [promptDraft, setPromptDraft] = useState("");
+  const [usage, setUsage] = useState<{ userMessages: number; assistantMessages: number; totalChars: number }>({ userMessages: 0, assistantMessages: 0, totalChars: 0 });
 
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
@@ -40,6 +43,12 @@ export function SettingsDialog({
 
   useEffect(() => {
     setTheme(getStoredTheme());
+    try {
+      const raw = localStorage.getItem("rextflex:saved-prompts");
+      setSavedPrompts(raw ? JSON.parse(raw) : []);
+      const usageRaw = localStorage.getItem("rextflex:usage");
+      if (usageRaw) setUsage(JSON.parse(usageRaw));
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -143,6 +152,21 @@ export function SettingsDialog({
 
         <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
           <div className="space-y-2">
+            <span className="font-medium text-sm">Usage</span>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border p-2"><div className="text-lg font-semibold">{usage.userMessages}</div><div className="text-muted-foreground text-[11px]">Your messages</div></div>
+              <div className="rounded-lg border p-2"><div className="text-lg font-semibold">{usage.assistantMessages}</div><div className="text-muted-foreground text-[11px]">AI replies</div></div>
+              <div className="rounded-lg border p-2"><div className="text-lg font-semibold">{usage.totalChars.toLocaleString()}</div><div className="text-muted-foreground text-[11px]">Characters</div></div>
+            </div>
+            <p className="text-muted-foreground text-xs">Local usage tracking for this device.</p>
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-medium text-sm">Shortcuts & workflow</span>
+            <p className="text-muted-foreground text-xs">Enter to send • Shift+Enter for a new line • Stop uses the same send button while generating.</p>
+          </div>
+
+          <div className="space-y-2">
             <span className="font-medium text-sm">Theme</span>
             <div className="flex gap-2">
               {(["light", "dark", "system"] as const).map((mode) => (
@@ -230,6 +254,48 @@ export function SettingsDialog({
                 >
                   Save persona
                 </Button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <span className="font-medium text-sm">Saved prompts</span>
+            <div className="flex gap-2">
+              <Input onChange={(event) => setPromptDraft(event.target.value)} placeholder="Save a reusable prompt…" value={promptDraft} />
+              <Button
+                disabled={!promptDraft.trim()}
+                onClick={() => {
+                  const next = [...savedPrompts, promptDraft.trim()].slice(-20);
+                  setSavedPrompts(next);
+                  localStorage.setItem("rextflex:saved-prompts", JSON.stringify(next));
+                  setPromptDraft("");
+                }}
+                size="sm"
+                type="button"
+              >Save</Button>
+            </div>
+            {savedPrompts.length ? (
+              <div className="space-y-1">
+                {savedPrompts.map((prompt) => (
+                  <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs" key={prompt}>
+                    <span className="min-w-0 flex-1 truncate">{prompt}</span>
+                    <button
+                      aria-label="Use saved prompt"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent("rextflex:insert-prompt", { detail: prompt }));
+                        onOpenChange(false);
+                      }}
+                      type="button"
+                    >Use</button>
+                    <button
+                      aria-label="Copy saved prompt"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => void navigator.clipboard.writeText(prompt)}
+                      type="button"
+                    ><CopyIcon className="size-3.5" /></button>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>

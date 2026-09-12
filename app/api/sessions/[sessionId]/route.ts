@@ -1,4 +1,4 @@
-import { deleteSession, getSessionMessages, renameSession, setSessionPublic } from "@/lib/db";
+import { deleteSession, getSessionMessages, renameSession, setSessionFavorite, setSessionPinned, setSessionPublic } from "@/lib/db";
 import { getUserFromRequest } from "@/lib/session";
 
 export async function GET(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
@@ -15,7 +15,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ sessio
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { sessionId } = await params;
-  const { isPublic, title }: { isPublic?: boolean; title?: string } = await req.json();
+  const { isPublic, title, isPinned, isFavorite }: { isPublic?: boolean; title?: string; isPinned?: boolean; isFavorite?: boolean } = await req.json();
 
   if (typeof isPublic === "boolean") {
     await setSessionPublic(sessionId, user.id, isPublic);
@@ -23,6 +23,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ sessio
 
   if (title && title.trim().length > 0) {
     await renameSession(sessionId, user.id, title);
+  }
+
+  if (typeof isPinned === "boolean") {
+    await setSessionPinned(sessionId, user.id, isPinned);
+  }
+
+  if (typeof isFavorite === "boolean") {
+    await setSessionFavorite(sessionId, user.id, isFavorite);
   }
 
   return Response.json({ ok: true });

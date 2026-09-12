@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { AlertCircleIcon, PaperclipIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
+import { AlertCircleIcon, DownloadIcon, PaperclipIcon, PlusIcon, RotateCcwIcon, StopCircleIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -59,6 +59,7 @@ export function RextflexChat({
   const [attachSheetOpen, setAttachSheetOpen] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [temporaryChat, setTemporaryChat] = useState(false);
   const modelTierRef = useRef(modelTier);
   const webSearchEnabledRef = useRef(webSearchEnabled);
   const thinkingEnabledRef = useRef(thinkingEnabled);
@@ -71,10 +72,11 @@ export function RextflexChat({
           sessionId,
           thinkingEnabled: thinkingEnabledRef.current,
           webSearchEnabled: webSearchEnabledRef.current,
+          temporaryChat,
         }),
       }),
   );
-  const { error, messages, regenerate, sendMessage, setMessages, status } = useChat({
+  const { error, messages, regenerate, sendMessage, setMessages, status, stop } = useChat({
     messages: initialMessages,
     transport,
   });
@@ -82,6 +84,38 @@ export function RextflexChat({
   // Loads the user's last-picked model tier once on mount, so the picker
   // shows the right thing immediately instead of always starting at the
   // default until Settings happens to be opened.
+  useEffect(() => {
+    const handleInsertPrompt = (event: Event) => {
+      const custom = event as CustomEvent<string>;
+      const prompt = custom.detail?.trim();
+      if (!prompt) return;
+      const textarea = document.querySelector<HTMLTextAreaElement>("[data-slot='input-group-control']");
+      if (!textarea) return;
+      textarea.value = textarea.value ? `${textarea.value} ${prompt}` : prompt;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.focus();
+      setHasInputText(true);
+    };
+    window.addEventListener("rextflex:insert-prompt", handleInsertPrompt);
+    return () => window.removeEventListener("rextflex:insert-prompt", handleInsertPrompt);
+  }, []);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+    try {
+      const stats = JSON.parse(localStorage.getItem("rextflex:usage") || "{}");
+      const userCount = messages.filter((m) => m.role === "user").length;
+      const assistantCount = messages.filter((m) => m.role === "assistant").length;
+      localStorage.setItem("rextflex:usage", JSON.stringify({
+        userMessages: userCount,
+        assistantMessages: assistantCount,
+        lastUpdated: Date.now(),
+        totalChars: messages.reduce((sum, m) => sum + m.parts.reduce((n, part) => n + (part.type === "text" ? part.text.length : 0), 0), 0),
+        ...stats,
+      }));
+    } catch {}
+  }, [messages]);
+
   useEffect(() => {
     fetch("/api/settings")
       .then((res) => res.json())
@@ -116,6 +150,20 @@ export function RextflexChat({
   };
 
   const isBusy = status === "submitted" || status === "streaming";
+
+  const exportChat = (format: "json" | "md") => {
+    const title = document.title || APP_NAME;
+    const payload = format === "json"
+      ? JSON.stringify({ title, sessionId, messages }, null, 2)
+      : messages.map((message) => `## ${message.role === "user" ? "You" : "RextFlex Ai"}\n\n${message.parts.map((part) => part.type === "text" ? part.text : "").join("\n")}`).join("\n\n");
+    const blob = new Blob([payload], { type: format === "json" ? "application/json" : "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "chat"}.${format === "json" ? "json" : "md"}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Phones suspend the tab's JS (and often abort the in-flight request)
   // when the browser is backgrounded, which used to make a reply vanish.
@@ -172,7 +220,7 @@ export function RextflexChat({
   };
 
   const composer = (
-    <PromptInput maxFiles={4} maxFileSize={10 * 1024 * 1024} multiple onSubmit={handleSubmit}>
+    <PromptInput globalDrop maxFiles={4} maxFileSize={10 * 1024 * 1024} multiple onSubmit={handleSubmit}>
       <AttachmentChips />
       <PromptInputTextarea
         onChange={(event) => setHasInputText(event.currentTarget.value.trim().length > 0)}
@@ -199,7 +247,14 @@ export function RextflexChat({
           />
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
         </div>
-        <PromptInputSubmit disabled={!hasInputText && !isBusy} status={status} />
+        <div className="flex items-center gap-1">
+        {hasConversationContent ? (
+          <Button aria-label="Export chat as Markdown" onClick={() => exportChat("md")} size="icon-sm" type="button" variant="ghost">
+            <DownloadIcon className="size-4" />
+          </Button>
+        ) : null}
+        <PromptInputSubmit disabled={!hasInputText && !isBusy} onStop={stop} status={status} />
+      </div>
       </PromptInputTools>
       <AttachSheet
         onOpenChange={setAttachSheetOpen}
@@ -208,6 +263,8 @@ export function RextflexChat({
         open={attachSheetOpen}
         thinkingEnabled={thinkingEnabled}
         webSearchEnabled={webSearchEnabled}
+        temporaryChat={temporaryChat}
+        onTemporaryChatChange={setTemporaryChat}
       />
     </PromptInput>
   );
@@ -227,6 +284,15 @@ export function RextflexChat({
                 isStreaming={status === "streaming" && index === messages.length - 1}
                 key={message.id}
                 message={message}
+                onEdit={message.role === "user" && status === "ready" ? async () => {
+                  const currentText = message.parts.map((part) => part.type === "text" ? part.text : "").join("\n").trim();
+                  const edited = window.prompt("Edit your message", currentText);
+                  if (!edited || edited.trim() === currentText) return;
+                  const messageIndex = messages.findIndex((item) => item.id === message.id);
+                  if (messageIndex < 0) return;
+                  setMessages(messages.slice(0, messageIndex));
+                  await sendMessage({ text: edited.trim() });
+                } : undefined}
               />
             ))}
             {error ? <ErrorMessage message={error.message} /> : null}

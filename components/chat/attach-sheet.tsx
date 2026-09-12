@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraIcon, FolderIcon, GlobeIcon, ImageIcon, LightbulbIcon } from "lucide-react";
+import { CameraIcon, FolderIcon, GlobeIcon, ImageIcon, LightbulbIcon, ShieldCheckIcon } from "lucide-react";
 import { useRef } from "react";
 import { usePromptInputAttachments } from "@/components/ai-elements/prompt-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,8 @@ export function AttachSheet({
   open,
   thinkingEnabled,
   webSearchEnabled,
+  temporaryChat,
+  onTemporaryChatChange,
 }: {
   readonly onOpenChange: (open: boolean) => void;
   readonly onThinkingChange: (enabled: boolean) => void;
@@ -26,6 +28,8 @@ export function AttachSheet({
   readonly open: boolean;
   readonly thinkingEnabled: boolean;
   readonly webSearchEnabled: boolean;
+  readonly temporaryChat: boolean;
+  readonly onTemporaryChatChange: (enabled: boolean) => void;
 }) {
   const attachments = usePromptInputAttachments();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -68,6 +72,13 @@ export function AttachSheet({
             icon={<GlobeIcon className="size-4" />}
             label="Web search"
             onChange={onWebSearchChange}
+          />
+          <ToggleRow
+            checked={temporaryChat}
+            icon={<ShieldCheckIcon className="size-4" />}
+            label="Temporary chat"
+            onChange={onTemporaryChatChange}
+            sublabel="Do not save this conversation to chat history"
           />
           <ToggleRow
             checked={thinkingEnabled}

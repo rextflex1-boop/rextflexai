@@ -5,6 +5,8 @@ import {
   MenuIcon,
   MoreVerticalIcon,
   PencilIcon,
+  PinIcon,
+  StarIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -40,8 +42,10 @@ export function Sidebar({
 
   const filteredSessions = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return sessions;
-    return sessions.filter((session) => (session.title ?? "new chat").toLowerCase().includes(query));
+    const source = query
+      ? sessions.filter((session) => (session.title ?? "new chat").toLowerCase().includes(query))
+      : sessions;
+    return [...source].sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || Number(b.isFavorite) - Number(a.isFavorite) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
   }, [sessions, search]);
 
   useEffect(() => {
@@ -93,6 +97,20 @@ export function Sidebar({
       window.alert("Share link copied to clipboard!");
     } catch {
       window.prompt("Copy this link to share the chat:", url);
+    }
+  };
+
+  const updateSessionFlag = async (session: SessionSummary, field: "isPinned" | "isFavorite") => {
+    const next = !session[field];
+    setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, [field]: next } : s)));
+    try {
+      await fetch(`/api/sessions/${session.id}`, {
+        body: JSON.stringify({ [field]: next }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+    } catch {
+      setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, [field]: session[field] } : s)));
     }
   };
 
@@ -179,7 +197,7 @@ export function Sidebar({
                     key={session.id}
                   >
                     <a className="min-w-0 flex-1 truncate text-sm" href={`/s/${session.id}`}>
-                      {session.title || "New chat"}
+                      <span className="inline-flex min-w-0 items-center gap-1 truncate">{session.isPinned ? <PinIcon className="size-3 shrink-0 text-muted-foreground" /> : null}{session.isFavorite ? <StarIcon className="size-3 shrink-0 text-muted-foreground" /> : null}<span className="truncate">{session.title || "New chat"}</span></span>
                     </a>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -194,6 +212,14 @@ export function Sidebar({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => void updateSessionFlag(session, "isPinned")}>
+                          <PinIcon className="size-4" />
+                          {session.isPinned ? "Unpin" : "Pin"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void updateSessionFlag(session, "isFavorite")}>
+                          <StarIcon className="size-4" />
+                          {session.isFavorite ? "Remove favorite" : "Favorite"}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => void handleRename(session)}>
                           <PencilIcon className="size-4" />
                           Rename

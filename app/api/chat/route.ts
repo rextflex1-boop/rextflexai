@@ -55,12 +55,14 @@ export async function POST(req: Request) {
     sessionId,
     thinkingEnabled = true,
     webSearchEnabled = true,
+    temporaryChat = false,
   }: {
     messages: UIMessage[];
     modelTier?: string;
     sessionId: string;
     thinkingEnabled?: boolean;
     webSearchEnabled?: boolean;
+    temporaryChat?: boolean;
   } = await req.json();
 
   const modelTier = requestedModelTier && isModelTier(requestedModelTier) ? requestedModelTier : DEFAULT_MODEL_TIER;
@@ -69,14 +71,14 @@ export async function POST(req: Request) {
 
   // Make sure this session belongs to the signed-in user before touching it.
   try {
-    await ensureSession(sessionId, user.id);
+    if (!temporaryChat) await ensureSession(sessionId, user.id);
     const owner = await getSessionOwner(sessionId);
     if (owner && owner !== user.id) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const lastMessage = messages.at(-1);
-    if (lastMessage?.role === "user") {
+    if (!temporaryChat && lastMessage?.role === "user") {
       await saveMessage(sessionId, lastMessage);
       await touchSessionTitle(sessionId, extractText(lastMessage));
     }
@@ -283,6 +285,7 @@ export async function POST(req: Request) {
         }
 
         const result = streamText({
+          abortSignal: req.signal,
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           messages: modelMessages,
           model: groq(groqModelId),
@@ -388,7 +391,7 @@ export async function POST(req: Request) {
 
     onFinish: async ({ responseMessage }) => {
       try {
-        if (responseMessage.role === "assistant") {
+        if (!temporaryChat && responseMessage.role === "assistant") {
           await saveMessage(sessionId, responseMessage);
         }
       } catch (error) {

@@ -72,8 +72,11 @@ alter table chat_sessions add column if not exists title text;
 alter table chat_sessions add column if not exists updated_at timestamptz not null default now();
 alter table chat_sessions add column if not exists user_id text references "user"(id) on delete cascade;
 alter table chat_sessions add column if not exists is_public boolean not null default false;
+alter table chat_sessions add column if not exists is_pinned boolean not null default false;
+alter table chat_sessions add column if not exists is_favorite boolean not null default false;
 
 create index if not exists chat_sessions_user_id_idx on chat_sessions(user_id);
+create index if not exists chat_sessions_pinned_idx on chat_sessions(user_id, is_pinned desc, updated_at desc);
 
 create table if not exists chat_messages (
   id text primary key,

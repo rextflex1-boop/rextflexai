@@ -15,6 +15,8 @@ export type SessionSummary = {
   readonly id: string;
   readonly title: string | null;
   readonly updatedAt: string;
+  readonly isPinned: boolean;
+  readonly isFavorite: boolean;
 };
 
 export type Persona = {
@@ -72,7 +74,7 @@ export async function getSessionMessages(sessionId: string, userId: string): Pro
 export async function listSessions(userId: string): Promise<SessionSummary[]> {
   if (!sql) return [];
   const rows = await sql`
-    select id, title, updated_at from chat_sessions
+    select id, title, updated_at, is_pinned, is_favorite from chat_sessions
     where user_id = ${userId}
     order by updated_at desc
     limit 100
@@ -81,7 +83,26 @@ export async function listSessions(userId: string): Promise<SessionSummary[]> {
     id: row.id as string,
     title: row.title as string | null,
     updatedAt: row.updated_at as string,
+    isPinned: Boolean(row.is_pinned),
+    isFavorite: Boolean(row.is_favorite),
   }));
+}
+
+
+export async function setSessionPinned(sessionId: string, userId: string, isPinned: boolean): Promise<void> {
+  if (!sql) return;
+  await sql`
+    update chat_sessions set is_pinned = ${isPinned}, updated_at = now()
+    where id = ${sessionId} and user_id = ${userId}
+  `;
+}
+
+export async function setSessionFavorite(sessionId: string, userId: string, isFavorite: boolean): Promise<void> {
+  if (!sql) return;
+  await sql`
+    update chat_sessions set is_favorite = ${isFavorite}, updated_at = now()
+    where id = ${sessionId} and user_id = ${userId}
+  `;
 }
 
 export async function renameSession(sessionId: string, userId: string, title: string): Promise<void> {
