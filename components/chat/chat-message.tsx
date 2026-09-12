@@ -57,6 +57,7 @@ function liveReasoningHeadline(text: string): string | undefined {
 export function ChatMessage({
   isStreaming,
   message,
+  onEdit,
 }: {
   readonly isStreaming: boolean;
   readonly message: UIMessage;
