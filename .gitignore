@@ -1,12 +1,5 @@
-node_modules/
-.expo/
-dist/
-web-build/
-android/
-ios/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+node_modules
+.next
 .env
+.env.local
+*.log
