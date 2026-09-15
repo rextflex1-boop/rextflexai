@@ -28,6 +28,7 @@ import { AttachmentChips } from "./attachment-chips";
 import { ChatMessage } from "./chat-message";
 import { GenerationStatus } from "./generation-status";
 import { ModelPickerButton } from "./model-picker";
+import { ResponseModePickerButton, type ResponseMode } from "./response-mode-picker";
 import { Sidebar } from "./sidebar";
 import { VoiceButton } from "./voice-button";
 
@@ -60,9 +61,11 @@ export function RextflexChat({
   const [attachSheetOpen, setAttachSheetOpen] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [responseMode, setResponseMode] = useState<ResponseMode>("balanced");
   const modelTierRef = useRef(modelTier);
   const webSearchEnabledRef = useRef(webSearchEnabled);
   const thinkingEnabledRef = useRef(thinkingEnabled);
+  const responseModeRef = useRef<ResponseMode>(responseMode);
   const [transport] = useState(
     () =>
       new DefaultChatTransport({
@@ -71,6 +74,7 @@ export function RextflexChat({
           modelTier: modelTierRef.current,
           sessionId,
           thinkingEnabled: thinkingEnabledRef.current,
+          responseMode: responseModeRef.current,
           webSearchEnabled: webSearchEnabledRef.current,
         }),
       }),
@@ -114,6 +118,26 @@ export function RextflexChat({
   const updateThinkingEnabled = (enabled: boolean) => {
     setThinkingEnabled(enabled);
     thinkingEnabledRef.current = enabled;
+  };
+
+  const updateResponseMode = (mode: ResponseMode) => {
+    setResponseMode(mode);
+    responseModeRef.current = mode;
+
+    if (mode === "fast") {
+      updateModelTier("silicon");
+      updateThinkingEnabled(false);
+      return;
+    }
+
+    if (mode === "deep") {
+      updateModelTier("titan");
+      updateThinkingEnabled(true);
+      return;
+    }
+
+    updateModelTier(DEFAULT_MODEL_TIER);
+    updateThinkingEnabled(true);
   };
 
   const isBusy = status === "submitted" || status === "streaming";
@@ -198,6 +222,7 @@ export function RextflexChat({
               }
             }}
           />
+          <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
         </div>
         <PromptInputSubmit disabled={!hasInputText && !isBusy} status={status} />

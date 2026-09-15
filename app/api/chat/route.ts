@@ -54,17 +54,22 @@ export async function POST(req: Request) {
     messages,
     modelTier: requestedModelTier,
     sessionId,
+    responseMode = "balanced",
     thinkingEnabled = true,
     webSearchEnabled = true,
   }: {
     messages: UIMessage[];
     modelTier?: string;
     sessionId: string;
+    responseMode?: string;
     thinkingEnabled?: boolean;
     webSearchEnabled?: boolean;
   } = await req.json();
 
-  const modelTier = requestedModelTier && isModelTier(requestedModelTier) ? requestedModelTier : DEFAULT_MODEL_TIER;
+  const validResponseMode = responseMode === "fast" || responseMode === "deep" ? responseMode : "balanced";
+  const selectedTier = requestedModelTier && isModelTier(requestedModelTier) ? requestedModelTier : DEFAULT_MODEL_TIER;
+  const modelTier = validResponseMode === "fast" ? "silicon" : validResponseMode === "deep" ? "titan" : selectedTier;
+  const effectiveThinkingEnabled = validResponseMode === "fast" ? false : thinkingEnabled;
   const modelTierInfo = getModelTierInfo(modelTier);
   const groqModelId = modelTierInfo.groqModelId;
 
@@ -335,7 +340,7 @@ export async function POST(req: Request) {
           // mechanism for this on Groq, so it's left alone rather than
           // risking a rejected request over an unsupported field.
           ...(modelTierInfo.supportsReasoningEffort
-            ? { providerOptions: { groq: { reasoning_effort: thinkingEnabled ? "medium" : "low" } } }
+            ? { providerOptions: { groq: { reasoning_effort: effectiveThinkingEnabled ? "medium" : "low" } } }
             : {}),
 
           // Only the first attempt is seeded, so a retry isn't forced to
