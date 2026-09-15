@@ -233,3 +233,89 @@ textarea {
     transform: none !important;
   }
 }
+
+/* Smooth photo-upload state + stable mobile composer layout. */
+.rfx-attachment-chip {
+  animation: rfx-attachment-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rfx-upload-spinner {
+  animation: rfx-upload-spin 1.15s linear infinite;
+}
+
+.rfx-composer [data-slot="input-group-control"] {
+  min-width: 0 !important;
+  width: 100%;
+}
+
+.rfx-composer [data-slot="input-group-addon"][data-align="block-end"] {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.rfx-composer [data-slot="input-group-addon"][data-align="block-end"] > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@keyframes rfx-attachment-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes rfx-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .rfx-composer {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .rfx-composer [data-slot="input-group-control"] {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .rfx-composer [data-slot="input-group-button"] {
+    flex: 0 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rfx-attachment-chip,
+  .rfx-upload-spinner {
+    animation: none !important;
+  }
+}
+
+
+@media (max-width: 640px) {
+  .rfx-composer {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: stretch !important;
+  }
+
+  .rfx-composer [data-slot="input-group-control"] {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .rfx-composer .rfx-composer-tools {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+}

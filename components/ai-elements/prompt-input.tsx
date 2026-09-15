@@ -164,6 +164,7 @@ export interface AttachmentsContext {
   files: (FileUIPart & { id: string })[];
   add: (files: File[] | FileList) => void;
   remove: (id: string) => void;
+  update: (id: string, patch: Partial<FileUIPart>) => void;
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
@@ -250,6 +251,10 @@ export const PromptInputProvider = ({
     ]);
   }, []);
 
+  const update = useCallback((id: string, patch: Partial<FileUIPart>) => {
+    setAttachmentFiles((prev) => prev.map((file) => (file.id === id ? { ...file, ...patch } : file)));
+  }, []);
+
   const remove = useCallback((id: string) => {
     setAttachmentFiles((prev) => {
       const found = prev.find((f) => f.id === id);
@@ -302,8 +307,9 @@ export const PromptInputProvider = ({
       files: attachmentFiles,
       openFileDialog,
       remove,
+      update,
     }),
-    [attachmentFiles, add, remove, clear, openFileDialog],
+    [attachmentFiles, add, remove, clear, openFileDialog, update],
   );
 
   const __registerFileInput = useCallback(
@@ -465,6 +471,7 @@ export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit" 
   // bytes
   maxFileSize?: number;
   onError?: (err: { code: "max_files" | "max_file_size" | "accept"; message: string }) => void;
+  onFilesAdded?: (files: (FileUIPart & { id: string })[]) => void;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
@@ -480,6 +487,7 @@ export const PromptInput = ({
   maxFiles,
   maxFileSize,
   onError,
+  onFilesAdded,
   onSubmit,
   children,
   ...props
@@ -576,17 +584,22 @@ export const PromptInput = ({
             url: URL.createObjectURL(file),
           });
         }
+        queueMicrotask(() => onFilesAdded?.(next));
         return [...prev, ...next];
       });
     },
-    [matchesAccept, maxFiles, maxFileSize, onError],
+    [matchesAccept, maxFiles, maxFileSize, onError, onFilesAdded],
   );
+
+  const updateLocal = useCallback((id: string, patch: Partial<FileUIPart>) => {
+    setItems((prev) => prev.map((file) => (file.id === id ? { ...file, ...patch } : file)));
+  }, []);
 
   const removeLocal = useCallback(
     (id: string) =>
       setItems((prev) => {
         const found = prev.find((file) => file.id === id);
-        if (found?.url) {
+        if (found?.url?.startsWith("blob:")) {
           URL.revokeObjectURL(found.url);
         }
         return prev.filter((file) => file.id !== id);
@@ -640,7 +653,7 @@ export const PromptInput = ({
         ? controller?.attachments.clear()
         : setItems((prev) => {
             for (const file of prev) {
-              if (file.url) {
+              if (file.url?.startsWith("blob:")) {
                 URL.revokeObjectURL(file.url);
               }
             }
@@ -740,7 +753,7 @@ export const PromptInput = ({
     () => () => {
       if (!usingProvider) {
         for (const f of filesRef.current) {
-          if (f.url) {
+          if (f.url?.startsWith("blob:")) {
             URL.revokeObjectURL(f.url);
           }
         }
@@ -768,8 +781,9 @@ export const PromptInput = ({
       files: files.map((item) => ({ ...item, id: item.id })),
       openFileDialog,
       remove,
+      update: usingProvider ? controller.attachments.update : updateLocal,
     }),
-    [files, add, remove, clearAttachments, openFileDialog],
+    [files, add, remove, clearAttachments, openFileDialog, usingProvider, controller, updateLocal],
   );
 
   const refsCtx = useMemo<ReferencedSourcesContext>(

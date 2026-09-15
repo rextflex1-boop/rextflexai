@@ -108,6 +108,7 @@ export function RextflexChat({
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [responseMode, setResponseMode] = useState<ResponseMode>("balanced");
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const modelTierRef = useRef(modelTier);
   const webSearchEnabledRef = useRef(webSearchEnabled);
   const thinkingEnabledRef = useRef(thinkingEnabled);
@@ -221,42 +222,17 @@ export function RextflexChat({
   const handleSubmit = async (message: PromptInputMessage) => {
     const text = message.text.trim();
     if (text.length === 0 && message.files.length === 0) return;
+    if (isUploadingAttachment) return;
+
+    const preparedFiles = message.files;
+    if (preparedFiles.some((file) => file.url?.startsWith("blob:"))) {
+      return;
+    }
 
     setHasInputText(false);
 
-    const preparedFiles = await Promise.all(
-      message.files.map(async (file) => {
-        if (!file.url?.startsWith("data:") && !file.url?.startsWith("blob:")) return file;
-        let uploadFile = file;
-        if (file.mediaType?.startsWith("image/") && file.url?.startsWith("data:")) {
-          uploadFile = await optimizeImageFilePart(file);
-        }
-        const response = await fetch(uploadFile.url ?? "", { credentials: "include" });
-        if (!response.ok) throw new Error("Could not prepare the attachment for upload.");
-        const blob = await response.blob();
-        const formData = new FormData();
-        formData.set("file", new File([blob], uploadFile.filename ?? "upload", { type: uploadFile.mediaType ?? blob.type }));
-        const uploadResponse = await fetch("/api/uploads", {
-          method: "POST",
-          body: formData,
-        });
-        const result = (await uploadResponse.json()) as { error?: string; url?: string; mediaType?: string; fileName?: string };
-        if (!uploadResponse.ok || !result.url) {
-          throw new Error(result.error ?? "Attachment upload failed.");
-        }
-        return {
-          ...uploadFile,
-          filename: result.fileName ?? uploadFile.filename,
-          mediaType: result.mediaType ?? uploadFile.mediaType,
-          url: result.url,
-        };
-      }),
-    );
-
     if (!hasNavigated) {
       setHasNavigated(true);
-      // Next patches window.history to navigate, which would detach the
-      // active stream if we used the router — so we bypass it here.
       History.prototype.replaceState.call(
         window.history,
         window.history.state,
@@ -274,18 +250,19 @@ export function RextflexChat({
 
   const composer = (
     <PromptInput
+      accept="image/*"
       className="rfx-composer"
       maxFiles={4}
       maxFileSize={10 * 1024 * 1024}
       multiple
       onSubmit={handleSubmit}
     >
-      <AttachmentChips />
+      <AttachmentChips onUploadingChange={setIsUploadingAttachment} />
       <PromptInputTextarea
         onChange={(event) => setHasInputText(event.currentTarget.value.trim().length > 0)}
         placeholder="Send a message…"
       />
-      <PromptInputTools className="justify-between px-1 pb-1">
+      <PromptInputTools className="rfx-composer-tools w-full justify-between px-1 pb-1">
         <div className="flex items-center gap-1">
           <AttachButton onClick={() => setAttachSheetOpen(true)} />
           <VoiceButton
@@ -307,7 +284,7 @@ export function RextflexChat({
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
           <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
         </div>
-        <PromptInputSubmit className="rfx-send-button" disabled={!hasInputText && !isBusy} status={status} />
+        <PromptInputSubmit className="rfx-send-button" disabled={isUploadingAttachment || (!hasInputText && !isBusy)} status={status} />
       </PromptInputTools>
       <AttachSheet
         onOpenChange={setAttachSheetOpen}
