@@ -1,4 +1,4 @@
-import { deleteSession, getSessionMessages, renameSession, setSessionPublic } from "@/lib/db";
+import { deleteMessagesFrom, deleteSession, getSessionMessages, renameSession, setSessionPublic } from "@/lib/db";
 import { getUserFromRequest } from "@/lib/session";
 
 export async function GET(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
@@ -25,6 +25,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ sessio
     await renameSession(sessionId, user.id, title);
   }
 
+  return Response.json({ ok: true });
+}
+
+export async function POST(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
+  const user = await getUserFromRequest(req);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { sessionId } = await params;
+  const { messageId }: { messageId?: string } = await req.json();
+  if (!messageId) return Response.json({ error: "messageId is required" }, { status: 400 });
+
+  await deleteMessagesFrom(sessionId, user.id, messageId);
   return Response.json({ ok: true });
 }
 

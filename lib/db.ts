@@ -57,6 +57,33 @@ export async function saveMessage(sessionId: string, message: UIMessage): Promis
   `;
 }
 
+export async function deleteMessage(sessionId: string, userId: string, messageId: string): Promise<void> {
+  if (!sql) return;
+  await sql`
+    delete from chat_messages
+    where id = ${messageId}
+      and session_id = ${sessionId}
+      and exists (select 1 from chat_sessions where id = ${sessionId} and user_id = ${userId})
+  `;
+}
+
+export async function deleteMessagesFrom(sessionId: string, userId: string, messageId: string): Promise<void> {
+  if (!sql) return;
+  const rows = await sql`
+    select created_at from chat_messages
+    where id = ${messageId} and session_id = ${sessionId}
+      and exists (select 1 from chat_sessions where id = ${sessionId} and user_id = ${userId})
+  `;
+  if (rows.length === 0) return;
+  const createdAt = rows[0].created_at;
+  await sql`
+    delete from chat_messages
+    where session_id = ${sessionId}
+      and created_at >= ${createdAt}
+      and exists (select 1 from chat_sessions where id = ${sessionId} and user_id = ${userId})
+  `;
+}
+
 export async function getSessionMessages(sessionId: string, userId: string): Promise<UIMessage[]> {
   if (!sql) return [];
   const rows = await sql`

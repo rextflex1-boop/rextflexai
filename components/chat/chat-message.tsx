@@ -4,12 +4,15 @@ import type { UIMessage } from "ai";
 import {
   CheckIcon,
   CopyIcon,
+  CornerDownRightIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
   GlobeIcon,
   ImageIcon,
   LoaderIcon,
+  PencilIcon,
+  RotateCcwIcon,
   SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
@@ -79,9 +82,15 @@ function extractMessageText(message: UIMessage): string {
 export function ChatMessage({
   isStreaming,
   message,
+  onContinue,
+  onEdit,
+  onRegenerate,
 }: {
   readonly isStreaming: boolean;
   readonly message: UIMessage;
+  readonly onContinue?: (message: UIMessage) => void;
+  readonly onEdit?: (message: UIMessage) => void;
+  readonly onRegenerate?: (message: UIMessage) => void;
 }) {
   const lastTextIndex = message.parts.reduce(
     (last, part, index) => (part.type === "text" ? index : last),
@@ -99,17 +108,31 @@ export function ChatMessage({
           />
         ))}
       </MessageContent>
-      {message.role === "assistant" && !isStreaming ? <MessageActions message={message} /> : null}
+      {message.role === "assistant" && !isStreaming ? (
+        <MessageActions
+          message={message}
+          onContinue={onContinue}
+          onRegenerate={onRegenerate}
+        />
+      ) : null}
+      {message.role === "user" && !isStreaming ? <UserMessageActions message={message} onEdit={onEdit} /> : null}
     </Message>
   );
 }
 
-/** Copy / Like / Dislike / Read Aloud row shown under a finished assistant reply. */
-function MessageActions({ message }: { readonly message: UIMessage }) {
+/** Copy / Regenerate / Continue / Like / Dislike / Read Aloud row shown under a finished assistant reply. */
+function MessageActions({
+  message,
+  onContinue,
+  onRegenerate,
+}: {
+  readonly message: UIMessage;
+  readonly onContinue?: (message: UIMessage) => void;
+  readonly onRegenerate?: (message: UIMessage) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"down" | "up" | null>(null);
   const [speaking, setSpeaking] = useState(false);
-
   const text = extractMessageText(message);
   if (!text) return null;
 
@@ -139,10 +162,20 @@ function MessageActions({ message }: { readonly message: UIMessage }) {
   };
 
   return (
-    <div className="mt-1 flex items-center gap-0.5 text-muted-foreground">
+    <div className="mt-1 flex flex-wrap items-center gap-0.5 text-muted-foreground">
       <ActionButton label={copied ? "Copied" : "Copy"} onClick={handleCopy}>
         {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
       </ActionButton>
+      {onRegenerate ? (
+        <ActionButton label="Regenerate response" onClick={() => onRegenerate(message)}>
+          <RotateCcwIcon className="size-3.5" />
+        </ActionButton>
+      ) : null}
+      {onContinue ? (
+        <ActionButton label="Continue response" onClick={() => onContinue(message)}>
+          <CornerDownRightIcon className="size-3.5" />
+        </ActionButton>
+      ) : null}
       <ActionButton
         active={vote === "up"}
         label="Good response"
@@ -157,8 +190,25 @@ function MessageActions({ message }: { readonly message: UIMessage }) {
       >
         <ThumbsDownIcon className="size-3.5" />
       </ActionButton>
-      <ActionButton active={speaking} label={speaking ? "Stop" : "Read aloud"} onClick={handleReadAloud}>
+      <ActionButton active={speaking} label={speaking ? "Stop reading" : "Read aloud"} onClick={handleReadAloud}>
         {speaking ? <SquareIcon className="size-3.5" /> : <Volume2Icon className="size-3.5" />}
+      </ActionButton>
+    </div>
+  );
+}
+
+function UserMessageActions({
+  message,
+  onEdit,
+}: {
+  readonly message: UIMessage;
+  readonly onEdit?: (message: UIMessage) => void;
+}) {
+  if (!onEdit || !extractMessageText(message)) return null;
+  return (
+    <div className="mt-0.5 flex justify-end text-muted-foreground">
+      <ActionButton label="Edit message" onClick={() => onEdit(message)}>
+        <PencilIcon className="size-3.5" />
       </ActionButton>
     </div>
   );
