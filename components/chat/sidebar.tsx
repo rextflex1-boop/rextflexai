@@ -114,7 +114,7 @@ export function Sidebar({
     <>
       <Button
         aria-label="Open menu"
-        className="rf-menu-button pointer-events-auto fixed top-3 left-4 z-30"
+        className="pointer-events-auto fixed top-3 left-4 z-30"
         onClick={() => setOpen(true)}
         size="icon-sm"
         type="button"
@@ -127,13 +127,13 @@ export function Sidebar({
         <div className="fixed inset-0 z-40 flex">
           <button
             aria-label="Close menu"
-            className="rf-drawer-backdrop absolute inset-0"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
             type="button"
           />
-          <aside className="rf-sidebar relative z-10 flex h-full max-w-[85vw] flex-col">
-            <div className="rf-sidebar-brand flex items-center justify-between border-b p-3">
-              <div className="flex items-center gap-2.5"><span className="rf-logo size-8 text-xs">R</span><div><span className="font-semibold text-sm">RextFlex AI</span><span className="mt-0.5 block text-[9px] uppercase tracking-[.16em] text-muted-foreground">Premium workspace</span></div></div>
+          <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col border-r bg-background">
+            <div className="flex items-center justify-between border-b p-3">
+              <span className="font-medium text-sm">RextFlex Ai</span>
               <Button
                 aria-label="Close menu"
                 onClick={() => setOpen(false)}
@@ -145,9 +145,9 @@ export function Sidebar({
               </Button>
             </div>
 
-            <div className="space-y-1 border-b p-3">
+            <div className="space-y-1 border-b p-2">
               <a
-                className="rf-side-action flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors"
+                className="flex items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
                 href="/"
               >
                 <PlusIcon className="size-4" />
@@ -157,10 +157,10 @@ export function Sidebar({
 
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               {sessions.length > 0 ? (
-                <div className="relative mb-2 px-1">
+                <div className="relative mb-1 px-1">
                   <SearchIcon className="-translate-y-1/2 absolute top-1/2 left-3 size-3.5 text-muted-foreground" />
                   <Input
-                    className="h-9 rounded-xl bg-white/[.03] pl-8 text-sm"
+                    className="h-8 pl-8 text-sm"
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search chats"
                     value={search}
@@ -175,9 +175,8 @@ export function Sidebar({
               ) : (
                 filteredSessions.map((session) => (
                   <div
-                    className="rf-chat-row group flex items-center gap-1 rounded-xl border border-transparent px-2.5 py-2 transition-colors"
+                    className="group flex items-center gap-1 rounded-md px-2 py-2 hover:bg-muted"
                     key={session.id}
-                    data-active={session.id === activeSessionId}
                   >
                     <a className="min-w-0 flex-1 truncate text-sm" href={`/s/${session.id}`}>
                       {session.title || "New chat"}
@@ -217,8 +216,8 @@ export function Sidebar({
               )}
             </div>
 
-            <div className="space-y-1 border-t p-3">
-              <div className="mb-1 flex items-center gap-2 rounded-xl bg-white/[.025] px-2.5 py-2">
+            <div className="space-y-1 border-t p-2">
+              <div className="flex items-center gap-2 px-2 py-1.5">
                 {user.image ? (
                   // biome-ignore lint: simple avatar, no need for next/image here
                   <img alt="" className="size-6 shrink-0 rounded-full" src={user.image} />
@@ -232,7 +231,7 @@ export function Sidebar({
                 </span>
               </div>
               <button
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-white/[.05]"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
                 onClick={() => setSettingsOpen(true)}
                 type="button"
               >
@@ -240,7 +239,7 @@ export function Sidebar({
                 Settings
               </button>
               <button
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-white/[.05]"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
                 onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
                 type="button"
               >

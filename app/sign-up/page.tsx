@@ -1,8 +1,11 @@
 "use client";
 
-import { EyeIcon, EyeOffIcon, LockKeyholeIcon, MailIcon, SparklesIcon, UserRoundIcon } from "lucide-react";
+import { LockIcon, MailIcon, UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { AuthCard } from "@/components/auth/auth-card";
+import { AuthField } from "@/components/auth/auth-field";
+import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 export default function SignUpPage() {
@@ -10,7 +13,6 @@ export default function SignUpPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +20,9 @@ export default function SignUpPage() {
     event.preventDefault();
     setError(null);
     setLoading(true);
+
     const { error: signUpError } = await authClient.signUp.email({ email, name, password });
+
     setLoading(false);
     if (signUpError) {
       setError(signUpError.message ?? "Sign up failed.");
@@ -29,74 +33,76 @@ export default function SignUpPage() {
   };
 
   return (
-    <main className="rf-auth-page">
-      <div className="rf-auth-shell">
-        <div className="rf-auth-brand">
-          <div className="rf-logo">R</div>
-          <div><strong>RextFlex AI</strong><span>Premium AI workspace</span></div>
+    <main className="flex min-h-dvh items-center justify-center bg-background px-4 text-foreground">
+      <AuthCard>
+        <div className="mb-6 text-center">
+          <h1 className="font-semibold text-2xl tracking-tight">Create your account</h1>
+          <span className="mx-auto mt-2 block h-1 w-10 rounded-full bg-primary" />
+          <p className="mt-3 text-muted-foreground text-sm">Join RextFlex Ai — it only takes a minute</p>
         </div>
 
-        <section className="rf-auth-card">
-          <div className="mb-6">
-            <h1 className="rf-auth-title">Create your account</h1>
-            <p className="rf-auth-subtitle">Build your private AI workspace in seconds.</p>
-          </div>
+        <Button
+          className="h-11 w-full rounded-xl"
+          onClick={() => authClient.signIn.social({ callbackURL: "/", provider: "google" })}
+          type="button"
+          variant="outline"
+        >
+          Continue with Google
+        </Button>
 
-          <div className="rf-auth-form">
-            <button
-              className="rf-google flex w-full items-center justify-center gap-2 font-medium"
-              onClick={() => authClient.signIn.social({ callbackURL: "/", provider: "google" })}
-              type="button"
-            >
-              <span className="grid size-5 place-items-center rounded-full bg-white text-[10px] font-black text-black">G</span>
-              Continue with Google
-            </button>
+        <div className="my-5 flex items-center gap-3 text-muted-foreground text-xs">
+          <div className="h-px flex-1 bg-border" />
+          OR
+          <div className="h-px flex-1 bg-border" />
+        </div>
 
-            <div className="rf-divider"><span>or sign up with email</span></div>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <AuthField
+            autoComplete="name"
+            icon={UserIcon}
+            label="Name"
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Your name"
+            required
+            value={name}
+          />
+          <AuthField
+            autoComplete="email"
+            icon={MailIcon}
+            label="Email address"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com"
+            required
+            type="email"
+            value={email}
+          />
+          <AuthField
+            autoComplete="new-password"
+            icon={LockIcon}
+            label="Password"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="••••••••"
+            required
+            type="password"
+            value={password}
+          />
+          {error ? <p className="text-destructive text-sm">{error}</p> : null}
+          <Button
+            className="h-11 w-full rounded-xl bg-gradient-to-r from-primary to-primary/80 font-medium"
+            disabled={loading}
+            type="submit"
+          >
+            {loading ? "Creating account…" : "Sign up"}
+          </Button>
+        </form>
 
-            <form className="rf-auth-form" onSubmit={handleSubmit}>
-              <label className="rf-field">
-                <span className="sr-only">Name</span>
-                <UserRoundIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input autoComplete="name" onChange={(event) => setName(event.target.value)} placeholder="Your name" required value={name} style={{ paddingLeft: 40 }} />
-              </label>
-              <label className="rf-field">
-                <span className="sr-only">Email</span>
-                <MailIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input autoComplete="email" onChange={(event) => setEmail(event.target.value)} placeholder="Email address" required type="email" value={email} style={{ paddingLeft: 40 }} />
-              </label>
-              <label className="rf-field">
-                <span className="sr-only">Password</span>
-                <LockKeyholeIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  autoComplete="new-password"
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Create a password"
-                  required
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  style={{ paddingLeft: 40, paddingRight: 48 }}
-                />
-                <button aria-label={showPassword ? "Hide password" : "Show password"} className="rf-password-toggle" onClick={() => setShowPassword((value) => !value)} type="button">
-                  {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
-                </button>
-              </label>
-              {error ? <p className="rf-auth-error">{error}</p> : null}
-              <button className="rf-primary-btn" disabled={loading} type="submit">
-                {loading ? <span className="inline-flex items-center gap-2"><span className="rf-thinking-orbit" />Creating account…</span> : "Create RextFlex account"}
-              </button>
-            </form>
-          </div>
-
-          <div className="rf-auth-footer">
-            Already have an account? <a className="rf-auth-link" href="/sign-in">Sign in</a>
-          </div>
-        </section>
-
-        <p className="mt-4 text-center text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-          <SparklesIcon className="mr-1 inline size-3" /> Secure authentication • RextFlex AI
+        <p className="mt-6 text-center text-muted-foreground text-sm">
+          Already have an account?{" "}
+          <a className="font-medium text-foreground underline underline-offset-2" href="/sign-in">
+            Sign in
+          </a>
         </p>
-      </div>
+      </AuthCard>
     </main>
   );
 }

@@ -135,19 +135,19 @@ export function SettingsDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="rf-settings-dialog sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-lg">Settings</DialogTitle>
-          <DialogDescription>Personalize the RextFlex AI workspace, theme, persona and response style.</DialogDescription>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Ye app ke sabhi chats pe apply hoga.</DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
-          <div className="space-y-2 rounded-2xl border bg-white/[.02] p-4">
+          <div className="space-y-2">
             <span className="font-medium text-sm">Theme</span>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex gap-2">
               {(["light", "dark", "system"] as const).map((mode) => (
                 <Button
-                  className="flex-1 rounded-xl border-[rgba(246,198,75,.18)] capitalize"
+                  className="flex-1 capitalize"
                   key={mode}
                   onClick={() => selectTheme(mode)}
                   size="sm"

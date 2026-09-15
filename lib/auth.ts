@@ -12,14 +12,6 @@ function resolveBaseUrl(): string {
 function requireSecret(): string {
   if (process.env.BETTER_AUTH_SECRET) return process.env.BETTER_AUTH_SECRET;
   if (process.env.NODE_ENV === "development") return "dev-only-secret-change-in-production";
-
-  // Next.js evaluates route modules while collecting production build data.
-  // Keep the build deterministic without weakening runtime security: the
-  // placeholder is accepted only during the production build phase.
-  if (process.env.NEXT_PHASE === "phase-production-build") {
-    return "build-only-better-auth-secret-placeholder";
-  }
-
   throw new Error("Missing required environment variable: BETTER_AUTH_SECRET");
 }
 

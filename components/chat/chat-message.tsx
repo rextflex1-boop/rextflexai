@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
+  GitCommitIcon,
   GlobeIcon,
   ImageIcon,
   LoaderIcon,
@@ -29,6 +30,10 @@ type BuildProjectOutput =
   | { ok: false; error: string; log?: string };
 
 type WriteFileOutput = { ok: true; path: string } | { ok: false; error: string };
+
+type GithubPushOutput =
+  | { ok: true; commitUrl: string; pushedPaths: string[] }
+  | { ok: false; error: string };
 
 type WebSearchResultItem = { title: string; url: string; snippet: string };
 type WebSearchOutput = { results: WebSearchResultItem[]; note?: string } | { error: string };
@@ -284,6 +289,42 @@ function MessagePart({
                 {typeof output.sizeBytes === "number" && (
                   <span className="block text-xs text-muted-foreground">{formatBytes(output.sizeBytes)}</span>
                 )}
+              </span>
+              <ExternalLinkIcon className="size-4 shrink-0 text-muted-foreground" />
+            </a>
+          )}
+        </div>
+      );
+    }
+
+    case "tool-pushToGithub": {
+      const pushPart = part as GenericToolPart;
+      const output = pushPart.state === "output-available" ? (pushPart.output as GithubPushOutput) : undefined;
+
+      return (
+        <div className="flex flex-col gap-2">
+          <Tool defaultOpen={!output?.ok}>
+            <ToolHeader state={pushPart.state} title="Push to GitHub" type={pushPart.type} />
+            <ToolContent>
+              <ToolInput input={pushPart.input} />
+              <ToolOutput errorText={pushPart.errorText} output={pushPart.output} />
+            </ToolContent>
+          </Tool>
+          {output?.ok && output.commitUrl && (
+            <a
+              className="flex max-w-sm items-center gap-3 rounded-md border bg-background/60 p-2 text-sm"
+              href={output.commitUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted text-muted-foreground">
+                <GitCommitIcon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">
+                  {output.pushedPaths.length} file{output.pushedPaths.length === 1 ? "" : "s"} pushed
+                </span>
+                <span className="block truncate text-muted-foreground text-xs">View on GitHub</span>
               </span>
               <ExternalLinkIcon className="size-4 shrink-0 text-muted-foreground" />
             </a>

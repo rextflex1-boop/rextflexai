@@ -11,6 +11,7 @@ import {
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { ensureSession, getActiveSystemPrompt, getSessionOwner, saveGeneratedFile, saveMessage, touchSessionTitle } from "@/lib/db";
+import { pushFilesToGithub } from "@/lib/github";
 import { DEFAULT_MODEL_TIER, getModelTierInfo, isModelTier } from "@/lib/models";
 import { finishSandboxBuild, resetBuildSession, writeSandboxFile } from "@/lib/sandbox";
 import { getUserFromRequest } from "@/lib/session";
@@ -205,6 +206,41 @@ export async function POST(req: Request) {
           }),
         }),
 
+        pushToGithub: tool({
+          description:
+            "Commit one or more files directly to the user's connected GitHub repository " +
+            "(configured on the server — not something you choose). Use this when the " +
+            "user explicitly asks to push, commit, or save code to GitHub. Each file " +
+            "becomes its own commit. Give each file's FULL final content (not a diff) — " +
+            "for an existing file this replaces it entirely.",
+          execute: async ({
+            branch,
+            commitMessage,
+            files,
+          }: {
+            branch?: string;
+            commitMessage: string;
+            files: { path: string; content: string }[];
+          }) => {
+            const result = await pushFilesToGithub({ branch, commitMessage, files });
+            if (!result.ok) return { error: result.error, ok: false };
+            return { commitUrl: result.commitUrl, ok: true, pushedPaths: result.pushedPaths };
+          },
+          inputSchema: z.object({
+            branch: z.string().optional().describe("Branch to commit to — omit to use the server's configured default"),
+            commitMessage: z.string().describe("Short, clear commit message"),
+            files: z
+              .array(
+                z.object({
+                  content: z.string().describe("Full final file content"),
+                  path: z.string().describe("Path in the repo, e.g. 'app/page.tsx'"),
+                }),
+              )
+              .min(1)
+              .max(10),
+          }),
+        }),
+
         // Only registered when the user has the Web search toggle on (see
         // the "Add to chat" sheet) — a disabled tool just isn't offered to
         // the model at all, rather than being offered and told not to use it.
@@ -258,7 +294,9 @@ export async function POST(req: Request) {
           " For anything the user wants to actually run or download (code, a small app," +
           " a project), write it into the sandbox with the writeFile tool — one call per" +
           " file — then call finishBuild once at the end to zip it and get a download" +
-          " link. Don't just print code blocks for anything meant to run.",
+          " link. Don't just print code blocks for anything meant to run." +
+          " Only use pushToGithub when the user explicitly asks to push, commit, or save" +
+          " something to GitHub — never push code just because it was built or zipped.",
         activePrompt ? `Tone/style to use in your replies: ${activePrompt}.` : "",
       ];
 
