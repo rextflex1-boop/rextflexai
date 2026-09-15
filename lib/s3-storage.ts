@@ -75,7 +75,7 @@ export async function putS3Object(params: { key: string; data: Uint8Array; conte
       "x-amz-content-sha256": payloadHash,
       "x-amz-date": amzDate,
     },
-    body: params.data,
+    body: Buffer.from(params.data),
   });
 
   if (!response.ok) {
