@@ -1166,7 +1166,7 @@ export const PromptInputSubmit = ({
   return (
     <InputGroupButton
       aria-label={isGenerating ? "Stop" : "Submit"}
-      className={cn("absolute right-2.5 bottom-2.5 rounded-full", isGenerating && "motion-safe:animate-pulse", className)}
+      className={cn("absolute right-2.5 bottom-2.5 rounded-full", className)}
       onClick={handleClick}
       size={size}
       type={isGenerating && onStop ? "button" : "submit"}
