@@ -10,12 +10,13 @@ import {
 } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { ensureSession, getActiveSystemPrompt, getSessionOwner, saveGeneratedFile, saveMessage, touchSessionTitle } from "@/lib/db";
+import { ensureSession, getActiveSystemPrompt, getSessionOwner, saveMessage, touchSessionTitle } from "@/lib/db";
 import { pushFilesToGithub } from "@/lib/github";
 import { DEFAULT_MODEL_TIER, getModelTierInfo, isModelTier } from "@/lib/models";
 import { finishSandboxBuild, resetBuildSession, writeSandboxFile } from "@/lib/sandbox";
 import { getUserFromRequest } from "@/lib/session";
 import { webSearch } from "@/lib/web-search";
+import { buildS3ObjectKey, getS3ObjectUrl, putS3Object, s3Configured } from "@/lib/s3-storage";
 
 // Vercel Hobby plan caps a serverless function at 60s UNLESS you turn on
 // "Fluid Compute" in the project's Vercel settings (free, still on Hobby),
@@ -181,20 +182,26 @@ export async function POST(req: Request) {
 
             try {
               const fileId = nanoid(16);
-              await saveGeneratedFile({
+              if (!s3Configured) {
+                return {
+                  error: "Built the project, but S3-compatible file storage is not configured. Add the S3 variables in Railway and redeploy.",
+                  log: result.log,
+                  ok: false,
+                };
+              }
+              const key = buildS3ObjectKey("generated", user.id, fileId, result.fileName);
+              await putS3Object({
+                contentType: "application/zip",
                 data: result.zipBytes,
-                fileName: result.fileName,
-                id: fileId,
-                mimeType: "application/zip",
-                sessionId,
-                userId: user.id,
+                key,
               });
               return {
-                downloadUrl: `/api/files/${fileId}`,
+                downloadUrl: getS3ObjectUrl(key, 604800),
                 fileName: result.fileName,
                 log: result.log,
                 ok: true,
                 sizeBytes: result.sizeBytes,
+                storage: "s3",
               };
             } catch (error) {
               console.error("Failed to persist generated file:", error);

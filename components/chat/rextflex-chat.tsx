@@ -34,6 +34,52 @@ import { VoiceButton } from "./voice-button";
 
 const APP_NAME = "RextFlex Ai";
 
+async function optimizeImageFilePart(file: PromptInputMessage["files"][number]) {
+  if (
+    !file.url?.startsWith("data:") ||
+    !file.mediaType?.startsWith("image/") ||
+    file.mediaType === "image/gif" ||
+    file.mediaType === "image/svg+xml"
+  ) {
+    return file;
+  }
+
+  try {
+    const blob = await (await fetch(file.url)).blob();
+    if (blob.size <= 1_200_000) return file;
+    const bitmap = await createImageBitmap(blob);
+    const maxDimension = 2048;
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return file;
+    }
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const compressed = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.84));
+    if (!compressed) return file;
+    const dataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.readAsDataURL(compressed);
+    });
+    return {
+      ...file,
+      filename: `${(file.filename ?? "image").replace(/\.[^.]+$/, "")}.jpg`,
+      mediaType: "image/jpeg",
+      url: dataUrl,
+    };
+  } catch {
+    return file;
+  }
+}
+
 export type ChatUser = {
   readonly email: string;
   readonly image?: string;
@@ -178,6 +224,35 @@ export function RextflexChat({
 
     setHasInputText(false);
 
+    const preparedFiles = await Promise.all(
+      message.files.map(async (file) => {
+        if (!file.url?.startsWith("data:") && !file.url?.startsWith("blob:")) return file;
+        let uploadFile = file;
+        if (file.mediaType?.startsWith("image/") && file.url?.startsWith("data:")) {
+          uploadFile = await optimizeImageFilePart(file);
+        }
+        const response = await fetch(uploadFile.url ?? "", { credentials: "include" });
+        if (!response.ok) throw new Error("Could not prepare the attachment for upload.");
+        const blob = await response.blob();
+        const formData = new FormData();
+        formData.set("file", new File([blob], uploadFile.filename ?? "upload", { type: uploadFile.mediaType ?? blob.type }));
+        const uploadResponse = await fetch("/api/uploads", {
+          method: "POST",
+          body: formData,
+        });
+        const result = (await uploadResponse.json()) as { error?: string; url?: string; mediaType?: string; fileName?: string };
+        if (!uploadResponse.ok || !result.url) {
+          throw new Error(result.error ?? "Attachment upload failed.");
+        }
+        return {
+          ...uploadFile,
+          filename: result.fileName ?? uploadFile.filename,
+          mediaType: result.mediaType ?? uploadFile.mediaType,
+          url: result.url,
+        };
+      }),
+    );
+
     if (!hasNavigated) {
       setHasNavigated(true);
       // Next patches window.history to navigate, which would detach the
@@ -191,10 +266,11 @@ export function RextflexChat({
     }
 
     await sendMessage({
-      files: message.files,
+      files: preparedFiles,
       text,
     });
   };
+
 
   const composer = (
     <PromptInput
