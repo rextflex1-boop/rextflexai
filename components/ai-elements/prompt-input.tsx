@@ -160,9 +160,12 @@ const captureScreenshot = async (): Promise<File | null> => {
 // Provider Context & Types
 // ============================================================================
 
+export type RemoteAttachment = Pick<FileUIPart, "filename" | "mediaType" | "url">;
+
 export interface AttachmentsContext {
   files: (FileUIPart & { id: string })[];
   add: (files: File[] | FileList) => void;
+  addRemote: (files: RemoteAttachment[] | RemoteAttachment) => void;
   remove: (id: string) => void;
   update: (id: string, patch: Partial<FileUIPart>) => void;
   clear: () => void;
@@ -251,6 +254,19 @@ export const PromptInputProvider = ({
     ]);
   }, []);
 
+  const addRemote = useCallback((incoming: RemoteAttachment[] | RemoteAttachment) => {
+    const files = Array.isArray(incoming) ? incoming : [incoming];
+    if (files.length === 0) return;
+    setAttachmentFiles((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        ...file,
+        id: nanoid(),
+        type: "file" as const,
+      })),
+    ]);
+  }, []);
+
   const update = useCallback((id: string, patch: Partial<FileUIPart>) => {
     setAttachmentFiles((prev) => prev.map((file) => (file.id === id ? { ...file, ...patch } : file)));
   }, []);
@@ -302,6 +318,7 @@ export const PromptInputProvider = ({
   const attachments = useMemo<AttachmentsContext>(
     () => ({
       add,
+      addRemote,
       clear,
       fileInputRef,
       files: attachmentFiles,
@@ -309,7 +326,7 @@ export const PromptInputProvider = ({
       remove,
       update,
     }),
-    [attachmentFiles, add, remove, clear, openFileDialog, update],
+    [attachmentFiles, add, addRemote, remove, clear, openFileDialog, update],
   );
 
   const __registerFileInput = useCallback(
@@ -591,6 +608,23 @@ export const PromptInput = ({
     [matchesAccept, maxFiles, maxFileSize, onError, onFilesAdded],
   );
 
+  const addRemote = useCallback((incoming: RemoteAttachment[] | RemoteAttachment) => {
+    const remoteFiles = Array.isArray(incoming) ? incoming : [incoming];
+    if (remoteFiles.length === 0) return;
+    setItems((prev) => {
+      const capacity = typeof maxFiles === "number" ? Math.max(0, maxFiles - prev.length) : undefined;
+      const capped = typeof capacity === "number" ? remoteFiles.slice(0, capacity) : remoteFiles;
+      return [
+        ...prev,
+        ...capped.map((file) => ({
+          ...file,
+          id: nanoid(),
+          type: "file" as const,
+        })),
+      ];
+    });
+  }, [maxFiles]);
+
   const updateLocal = useCallback((id: string, patch: Partial<FileUIPart>) => {
     setItems((prev) => prev.map((file) => (file.id === id ? { ...file, ...patch } : file)));
   }, []);
@@ -776,6 +810,7 @@ export const PromptInput = ({
   const attachmentsCtx = useMemo<AttachmentsContext>(
     () => ({
       add,
+      addRemote: usingProvider ? controller.attachments.addRemote : addRemote,
       clear: clearAttachments,
       fileInputRef: inputRef,
       files: files.map((item) => ({ ...item, id: item.id })),
@@ -783,7 +818,7 @@ export const PromptInput = ({
       remove,
       update: usingProvider ? controller.attachments.update : updateLocal,
     }),
-    [files, add, remove, clearAttachments, openFileDialog, usingProvider, controller, updateLocal],
+    [files, add, addRemote, remove, clearAttachments, openFileDialog, usingProvider, controller, updateLocal],
   );
 
   const refsCtx = useMemo<ReferencedSourcesContext>(

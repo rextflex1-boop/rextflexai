@@ -16,7 +16,7 @@ import { DEFAULT_MODEL_TIER, getModelTierInfo, isModelTier } from "@/lib/models"
 import { finishSandboxBuild, resetBuildSession, writeSandboxFile } from "@/lib/sandbox";
 import { getUserFromRequest } from "@/lib/session";
 import { webSearch } from "@/lib/web-search";
-import { buildS3ObjectKey, getS3ObjectUrl, putS3Object, s3Configured } from "@/lib/s3-storage";
+import { uploadBytescaleFile } from "@/lib/bytescale-storage";
 
 // Vercel Hobby plan caps a serverless function at 60s UNLESS you turn on
 // "Fluid Compute" in the project's Vercel settings (free, still on Hobby),
@@ -181,31 +181,26 @@ export async function POST(req: Request) {
             }
 
             try {
-              const fileId = nanoid(16);
-              if (!s3Configured) {
-                return {
-                  error: "Built the project, but S3-compatible file storage is not configured. Add the S3 variables in Railway and redeploy.",
-                  log: result.log,
-                  ok: false,
-                };
-              }
-              const key = buildS3ObjectKey("generated", user.id, fileId, result.fileName);
-              await putS3Object({
+              const uploaded = await uploadBytescaleFile({
                 contentType: "application/zip",
                 data: result.zipBytes,
-                key,
+                fileName: result.fileName,
               });
               return {
-                downloadUrl: getS3ObjectUrl(key, 604800),
+                downloadUrl: uploaded.fileUrl,
                 fileName: result.fileName,
                 log: result.log,
                 ok: true,
                 sizeBytes: result.sizeBytes,
-                storage: "s3",
+                storage: "bytescale",
               };
             } catch (error) {
               console.error("Failed to persist generated file:", error);
-              return { error: "Built the project but failed to save the download.", log: result.log, ok: false };
+              return {
+                error: error instanceof Error ? error.message : "Built the project but failed to save the download.",
+                log: result.log,
+                ok: false,
+              };
             }
           },
           inputSchema: z.object({

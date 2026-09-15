@@ -1,17 +1,14 @@
 "use client";
 
-import { CameraIcon, FolderIcon, GlobeIcon, ImageIcon, LightbulbIcon } from "lucide-react";
-import { useRef } from "react";
+import * as Bytescale from "@bytescale/upload-widget";
+import { CameraIcon, FolderIcon, GlobeIcon, ImageIcon, LightbulbIcon, LoaderCircleIcon } from "lucide-react";
+import { useRef, useState } from "react";
 import { usePromptInputAttachments } from "@/components/ai-elements/prompt-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-/**
- * "Add to chat" sheet — a Camera/Photos/Files picker plus the Web search and
- * Thinking toggles, all in one place before you're mid-message. Own layout
- * (a plain dialog, not a native bottom sheet) and own visuals — not copying
- * any other app's exact chrome, just the same "everything in one menu" idea.
- */
+const IMGBB_UPLOAD_ENDPOINT = "/api/uploads";
+
 export function AttachSheet({
   onOpenChange,
   onThinkingChange,
@@ -30,11 +27,76 @@ export function AttachSheet({
   const attachments = usePromptInputAttachments();
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photosInputRef = useRef<HTMLInputElement | null>(null);
-  const filesInputRef = useRef<HTMLInputElement | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
 
-  const handlePicked = (fileList: FileList | null) => {
-    if (fileList && fileList.length > 0) attachments.add(fileList);
+  const uploadImageToImgBB = async (file: File) => {
+    setImageUploadError(null);
+    setImageUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file, file.name);
+      const response = await fetch(IMGBB_UPLOAD_ENDPOINT, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { error?: string; url?: string; mediaType?: string; fileName?: string }
+        | null;
+
+      if (!response.ok || !result?.url) {
+        throw new Error(result?.error ?? "Photo upload failed. Please try again.");
+      }
+
+      attachments.addRemote({
+        filename: result.fileName ?? file.name,
+        mediaType: result.mediaType ?? file.type,
+        url: result.url,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : "Photo upload failed.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleImagePicked = (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (file) void uploadImageToImgBB(file);
+  };
+
+  const openBytescaleFiles = async () => {
     onOpenChange(false);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const apiKey = process.env.NEXT_PUBLIC_BYTESCALE_API_KEY;
+    if (!apiKey) {
+      console.error("NEXT_PUBLIC_BYTESCALE_API_KEY is not configured.");
+      return;
+    }
+
+    try {
+      const files = await Bytescale.UploadWidget.open({
+        apiKey,
+        layout: "modal",
+        maxFileCount: 1,
+        maxFileSizeBytes: 50 * 1024 * 1024,
+        showFinishButton: true,
+      });
+
+      const uploaded = files.map((item) => ({
+        filename: item.originalFile?.originalFileName ?? item.filePath.split("/").pop() ?? "uploaded-file",
+        mediaType: item.originalFile?.mime,
+        url: item.fileUrl,
+      }));
+
+      if (uploaded.length > 0) attachments.addRemote(uploaded);
+    } catch (error) {
+      console.error("Bytescale file upload failed:", error);
+    }
   };
 
   return (
@@ -46,21 +108,35 @@ export function AttachSheet({
 
         <div className="grid grid-cols-3 gap-2">
           <PickerTile
+            disabled={imageUploading}
             icon={<CameraIcon className="size-5" />}
             label="Camera"
             onClick={() => cameraInputRef.current?.click()}
           />
           <PickerTile
+            disabled={imageUploading}
             icon={<ImageIcon className="size-5" />}
             label="Photos"
             onClick={() => photosInputRef.current?.click()}
           />
           <PickerTile
+            disabled={imageUploading}
             icon={<FolderIcon className="size-5" />}
             label="Files"
-            onClick={() => filesInputRef.current?.click()}
+            onClick={() => void openBytescaleFiles()}
           />
         </div>
+
+        {imageUploading ? (
+          <div className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+            <LoaderCircleIcon className="rfx-upload-spinner size-4 shrink-0" />
+            Uploading photo…
+          </div>
+        ) : imageUploadError ? (
+          <div className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {imageUploadError}
+          </div>
+        ) : null}
 
         <div className="flex flex-col divide-y">
           <ToggleRow
@@ -83,23 +159,24 @@ export function AttachSheet({
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(event) => handlePicked(event.currentTarget.files)}
+        disabled={imageUploading}
+        onChange={(event) => {
+          handleImagePicked(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
         ref={cameraInputRef}
         type="file"
       />
       <input
         accept="image/*"
         className="hidden"
-        multiple
-        onChange={(event) => handlePicked(event.currentTarget.files)}
+        disabled={imageUploading}
+        multiple={false}
+        onChange={(event) => {
+          handleImagePicked(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
         ref={photosInputRef}
-        type="file"
-      />
-      <input
-        className="hidden"
-        multiple
-        onChange={(event) => handlePicked(event.currentTarget.files)}
-        ref={filesInputRef}
         type="file"
       />
     </Dialog>
@@ -107,17 +184,20 @@ export function AttachSheet({
 }
 
 function PickerTile({
+  disabled,
   icon,
   label,
   onClick,
 }: {
+  readonly disabled?: boolean;
   readonly icon: React.ReactNode;
   readonly label: string;
   readonly onClick: () => void;
 }) {
   return (
     <button
-      className="flex flex-col items-center gap-2 rounded-xl border p-3 transition-colors hover:bg-muted"
+      className="flex flex-col items-center gap-2 rounded-xl border p-3 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={disabled}
       onClick={onClick}
       type="button"
     >

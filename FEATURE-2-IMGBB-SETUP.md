@@ -1,15 +1,23 @@
-# Feature 2 — ImgBB image upload
+# RextFlex AI — Feature 2 Upload Storage
 
-RextFlex sends user-selected images to the server first. The server then uploads the image to ImgBB, returns the hosted image URL, and the chat message uses that URL as its image part.
+## Photos / Camera
+- Images are uploaded through the server route `/api/uploads`.
+- The server keeps `IMGBB_API_KEY` private and sends the image to ImgBB.
+- The attachment is added to chat only after ImgBB returns a hosted URL, so the chip cannot remain stuck on `Uploading…`.
+
+## Files
+- General files are uploaded with the Bytescale Upload Widget.
+- Put the public Bytescale key in `NEXT_PUBLIC_BYTESCALE_API_KEY`.
+- The attachment is added to chat only after Bytescale reports the upload as complete.
+
+## Generated files
+- Generated ZIP files use the Bytescale JavaScript SDK with the same public upload-capable key.
+- No Railway S3 Bucket or S3 environment variables are required by this feature.
 
 ## Railway Variables
-
-Add this variable to the **RextFlex production service**:
-
-```text
-IMGBB_API_KEY=your_imgbb_api_key
+```
+IMGBB_API_KEY=your_imgbb_key
+NEXT_PUBLIC_BYTESCALE_API_KEY=public_your_bytescale_key
 ```
 
-Do not use a `NEXT_PUBLIC_` prefix. The key stays server-side.
-
-Generated AI ZIP/files continue to use the existing S3-compatible storage variables because ImgBB is an image-hosting API, not a general file/object store.
+Never paste the ImgBB secret API key into client-side code. The Bytescale key must be a `public_*` key for browser uploads.

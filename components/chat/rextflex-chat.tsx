@@ -108,7 +108,6 @@ export function RextflexChat({
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [responseMode, setResponseMode] = useState<ResponseMode>("balanced");
-  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const modelTierRef = useRef(modelTier);
   const webSearchEnabledRef = useRef(webSearchEnabled);
   const thinkingEnabledRef = useRef(thinkingEnabled);
@@ -222,8 +221,6 @@ export function RextflexChat({
   const handleSubmit = async (message: PromptInputMessage) => {
     const text = message.text.trim();
     if (text.length === 0 && message.files.length === 0) return;
-    if (isUploadingAttachment) return;
-
     const preparedFiles = message.files;
     if (preparedFiles.some((file) => file.url?.startsWith("blob:"))) {
       return;
@@ -257,7 +254,7 @@ export function RextflexChat({
       multiple
       onSubmit={handleSubmit}
     >
-      <AttachmentChips onUploadingChange={setIsUploadingAttachment} />
+      <AttachmentChips />
       <PromptInputTextarea
         onChange={(event) => setHasInputText(event.currentTarget.value.trim().length > 0)}
         placeholder="Send a message…"
@@ -284,7 +281,7 @@ export function RextflexChat({
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
           <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
         </div>
-        <PromptInputSubmit className="rfx-send-button" disabled={isUploadingAttachment || (!hasInputText && !isBusy)} status={status} />
+        <PromptInputSubmit className="rfx-send-button" disabled={!hasInputText && !isBusy} status={status} />
       </PromptInputTools>
       <AttachSheet
         onOpenChange={setAttachSheetOpen}
