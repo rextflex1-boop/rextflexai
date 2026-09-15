@@ -197,7 +197,13 @@ export function RextflexChat({
   };
 
   const composer = (
-    <PromptInput maxFiles={4} maxFileSize={10 * 1024 * 1024} multiple onSubmit={handleSubmit}>
+    <PromptInput
+      className="rfx-composer"
+      maxFiles={4}
+      maxFileSize={10 * 1024 * 1024}
+      multiple
+      onSubmit={handleSubmit}
+    >
       <AttachmentChips />
       <PromptInputTextarea
         onChange={(event) => setHasInputText(event.currentTarget.value.trim().length > 0)}
@@ -225,7 +231,7 @@ export function RextflexChat({
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
           <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
         </div>
-        <PromptInputSubmit disabled={!hasInputText && !isBusy} status={status} />
+        <PromptInputSubmit className="rfx-send-button" disabled={!hasInputText && !isBusy} status={status} />
       </PromptInputTools>
       <AttachSheet
         onOpenChange={setAttachSheetOpen}
