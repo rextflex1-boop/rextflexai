@@ -173,7 +173,7 @@ export function RextflexChat({
   };
 
   const composer = (
-    <PromptInput maxFiles={4} maxFileSize={10 * 1024 * 1024} multiple onSubmit={handleSubmit}>
+    <PromptInput className="rf-composer" maxFiles={4} maxFileSize={10 * 1024 * 1024} multiple onSubmit={handleSubmit}>
       <AttachmentChips />
       <PromptInputTextarea
         onChange={(event) => setHasInputText(event.currentTarget.value.trim().length > 0)}
@@ -214,7 +214,7 @@ export function RextflexChat({
   );
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <main className="rf-chat-shell flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <Sidebar activeSessionId={sessionId} user={user} />
 
       {hasConversationContent ? <ChatHeader /> : null}
@@ -248,15 +248,17 @@ export function RextflexChat({
 
       <div
         className={cn(
-          "mx-auto w-full px-4 sm:px-6",
+          "rf-composer-wrap mx-auto w-full px-4 sm:px-6",
           hasConversationContent
             ? "fixed bottom-0 left-1/2 z-20 max-w-3xl -translate-x-1/2 bg-gradient-to-t from-background via-background to-transparent pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             : "flex max-w-xl flex-1 flex-col items-center justify-center gap-8 pb-[10vh]",
         )}
       >
         {hasConversationContent ? null : (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <h1 className="font-medium text-5xl tracking-tighter">{APP_NAME}</h1>
+          <div className="mb-1 flex flex-col items-center gap-3 text-center">
+            <div className="rf-logo size-12 text-base">R</div>
+            <h1 className="font-semibold text-4xl tracking-tight sm:text-5xl">{APP_NAME}</h1>
+            <p className="max-w-lg text-sm leading-6 text-muted-foreground">A premium text-first AI workspace for writing, coding, research, files and everyday ideas.</p>
           </div>
         )}
         {hasConversationContent && isBusy ? (
@@ -299,8 +301,8 @@ function ErrorMessage({ message }: { readonly message: string }) {
 
 function ChatHeader() {
   return (
-    <header className="pointer-events-none fixed top-0 right-0 left-0 z-20 h-14">
-      <div className="relative mx-auto flex h-full w-full max-w-3xl items-center justify-center bg-background px-24">
+    <header className="rf-chat-header pointer-events-none fixed top-0 right-0 left-0 z-20 h-14">
+      <div className="relative mx-auto flex h-full w-full max-w-3xl items-center justify-center bg-background/80 px-24 backdrop-blur-md">
         <span className="truncate text-muted-foreground text-sm">{APP_NAME}</span>
         <Button
           aria-label="Start a new chat"

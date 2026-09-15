@@ -25,7 +25,7 @@ export function ModelPickerButton({
   return (
     <>
       <Button
-        className="h-8 gap-1 rounded-full px-3 text-xs"
+        className="h-8 gap-1 rounded-full border-[rgba(246,198,75,.18)] bg-[rgba(246,198,75,.06)] px-3 text-xs hover:bg-[rgba(246,198,75,.10)]"
         onClick={() => setOpen(true)}
         size="sm"
         type="button"
@@ -36,7 +36,7 @@ export function ModelPickerButton({
       </Button>
 
       <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="rf-model-dialog sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Select model</DialogTitle>
           </DialogHeader>
@@ -46,8 +46,8 @@ export function ModelPickerButton({
               return (
                 <button
                   className={cn(
-                    "flex items-center justify-between gap-3 rounded-md px-3 py-3 text-left transition-colors",
-                    selected ? "bg-primary/5" : "hover:bg-muted",
+                    "flex items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3.5 text-left transition-colors",
+                    selected ? "border-[rgba(246,198,75,.18)] bg-[rgba(246,198,75,.08)]" : "hover:bg-white/[.04]",
                   )}
                   key={tier.id}
                   onClick={() => {
@@ -58,7 +58,7 @@ export function ModelPickerButton({
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={cn("font-semibold text-sm", selected && "text-primary")}>
+                      <span className={cn("font-semibold text-sm", selected && "text-[var(--rf-gold-bright)]")}>
                         {tier.name}
                       </span>
                       {tier.badge ? (
@@ -67,11 +67,11 @@ export function ModelPickerButton({
                         </span>
                       ) : null}
                     </div>
-                    <p className={cn("mt-0.5 text-xs", selected ? "text-primary/80" : "text-muted-foreground")}>
+                    <p className={cn("mt-0.5 text-xs", selected ? "text-[var(--rf-gold-bright)]/70" : "text-muted-foreground")}>
                       {tier.description}
                     </p>
                   </div>
-                  {selected ? <CheckIcon className="size-4 shrink-0 text-primary" /> : null}
+                  {selected ? <CheckIcon className="size-4 shrink-0 text-[var(--rf-gold)]" /> : null}
                 </button>
               );
             })}
