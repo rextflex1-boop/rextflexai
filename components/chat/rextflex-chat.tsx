@@ -222,8 +222,8 @@ export function RextflexChat({
               }
             }}
           />
-          <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
           <ModelPickerButton onChange={updateModelTier} value={modelTier} />
+          <ResponseModePickerButton onChange={updateResponseMode} value={responseMode} />
         </div>
         <PromptInputSubmit disabled={!hasInputText && !isBusy} status={status} />
       </PromptInputTools>

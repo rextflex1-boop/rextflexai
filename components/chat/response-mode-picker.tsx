@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDownIcon, GaugeIcon, BrainIcon, SparklesIcon } from "lucide-react";
+import { CheckIcon, GaugeIcon, BrainIcon, Settings2Icon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -49,14 +49,15 @@ export function ResponseModePickerButton({
   return (
     <>
       <Button
-        className="h-8 gap-1 rounded-full px-3 text-xs"
+        aria-label={`Response mode: ${current.name}`}
+        className="size-8 rounded-full p-0"
         onClick={() => setOpen(true)}
         size="sm"
+        title={`Response mode: ${current.name}`}
         type="button"
-        variant="outline"
+        variant="ghost"
       >
-        {current.name}
-        <ChevronDownIcon className="size-3 text-muted-foreground" />
+        <Settings2Icon className="size-4" />
       </Button>
 
       <Dialog onOpenChange={setOpen} open={open}>
