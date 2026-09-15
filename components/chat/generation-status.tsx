@@ -9,6 +9,12 @@ type Phase = "answering" | "building" | "searching" | "thinking" | "understandin
 type PhaseState = "current" | "done" | "pending";
 type PhaseStep = { readonly label: string; readonly phase: Phase; readonly state: PhaseState };
 
+function getPartState(part: unknown): string | undefined {
+  if (typeof part !== "object" || part === null || !("state" in part)) return undefined;
+  const value = (part as { state?: unknown }).state;
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Derives a small, safe, high-level progress timeline from the message's
  * actual parts — never the model's real reasoning text, just which kind of
@@ -17,13 +23,13 @@ type PhaseStep = { readonly label: string; readonly phase: Phase; readonly state
 function derivePhases(message: UIMessage | undefined, status: string): PhaseStep[] {
   const parts = message?.parts ?? [];
   const hasReasoning = parts.some((part) => part.type === "reasoning");
-  const reasoningActive = parts.some((part) => part.type === "reasoning" && part.state === "streaming");
+  const reasoningActive = parts.some((part) => part.type === "reasoning" && getPartState(part) === "streaming");
   const searchPart = parts.find((part) => part.type === "tool-webSearch");
-  const searchActive = Boolean(searchPart) && searchPart?.state !== "output-available";
+  const searchActive = Boolean(searchPart) && getPartState(searchPart) !== "output-available";
   const writeParts = parts.filter((part) => part.type === "tool-writeFile");
-  const writingActive = writeParts.some((part) => part.state !== "output-available");
+  const writingActive = writeParts.some((part) => getPartState(part) !== "output-available");
   const buildPart = parts.find((part) => part.type === "tool-finishBuild");
-  const buildActive = Boolean(buildPart) && buildPart.state !== "output-available";
+  const buildActive = Boolean(buildPart) && getPartState(buildPart) !== "output-available";
   const hasTextStarted = parts.some((part) => part.type === "text" && part.text.length > 0);
 
   const steps: { label: string; phase: Phase }[] = [{ label: "Understanding your request", phase: "understanding" }];
