@@ -26,18 +26,14 @@ import { uploadBytescaleFile } from "@/lib/bytescale-storage";
 // enable Fluid Compute, you can safely raise this to e.g. 120–180.
 export const maxDuration = 60;
 
-// Groq's OpenAI-compatible API. Get a key (no card needed for Silicon/Titan —
-// Apex is metered, see lib/models.ts): https://console.groq.com/keys
-const groq = createOpenAICompatible({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-  name: "groq",
+// Google Gemini via its OpenAI-compatible endpoint. Gemini supports
+// multimodal image input and streaming through this compatibility layer.
+const gemini = createOpenAICompatible({
+  apiKey: process.env.GEMINI_API_KEY,
+  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+  name: "gemini",
 });
 
-// Groq's free tier is tight on tokens-per-minute for the free models (6,000
-// TPM for openai/gpt-oss-120b) even though the daily request count is
-// generous — keeping output shorter avoids a single long reply blowing the
-// per-minute token budget by itself.
 const MAX_OUTPUT_TOKENS = 4096;
 
 // Upper bound on how many tool-call/response round-trips one reply can take.
@@ -69,10 +65,23 @@ export async function POST(req: Request) {
 
   const validResponseMode = responseMode === "fast" || responseMode === "deep" ? responseMode : "balanced";
   const selectedTier = requestedModelTier && isModelTier(requestedModelTier) ? requestedModelTier : DEFAULT_MODEL_TIER;
-  const modelTier = validResponseMode === "fast" ? "silicon" : validResponseMode === "deep" ? "titan" : selectedTier;
+
+  // Gemini is natively multimodal. Keep the user-selected tier for images so
+  // an attached photo is analyzed by the same model the user chose.
+  const hasImageAttachment = messages.some((message) =>
+    message.parts.some(
+      (part) => part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/"),
+    ),
+  );
+
+  const modelTier = validResponseMode === "fast"
+    ? "silicon"
+    : validResponseMode === "deep"
+      ? "titan"
+      : selectedTier;
   const effectiveThinkingEnabled = validResponseMode === "fast" ? false : thinkingEnabled;
   const modelTierInfo = getModelTierInfo(modelTier);
-  const groqModelId = modelTierInfo.groqModelId;
+  const geminiModelId = modelTierInfo.geminiModelId;
 
   // Make sure this session belongs to the signed-in user before touching it.
   try {
@@ -91,17 +100,28 @@ export async function POST(req: Request) {
     console.error("Failed to persist user message:", error);
   }
 
-  // Groq's API rejects a `reasoning_content` field on assistant messages in
-  // the conversation history (400: "property 'reasoning_content' is
-  // unsupported") — but that's exactly what the AI SDK's openai-compatible
-  // provider sends back for any prior turn that included reasoning output
-  // (gpt-oss-120b is a reasoning model). We don't need that reasoning replayed
-  // to the model anyway, so strip it from history before converting.
-  const messagesWithoutReasoning = messages.map((message) =>
-    message.role === "assistant"
-      ? { ...message, parts: message.parts.filter((part) => part.type !== "reasoning") }
-      : message,
-  );
+  // Strip internal reasoning parts from prior UI messages so provider history
+  // stays clean and portable across Gemini model tiers.
+  const messagesWithoutReasoning = messages.map((message) => {
+    const parts = message.parts
+      .filter((part) => part.type !== "reasoning")
+      .flatMap((part) => {
+        // Keep images as true multimodal parts for Gemini. Turn non-image
+        // uploads into a text attachment note so the model can still see
+        // the filename/URL without receiving an unsupported binary payload.
+        if (part.type === "file" && !(part.mediaType ?? "").startsWith("image/")) {
+          const filename = part.filename ?? "uploaded file";
+          const url = part.url ? ` ${part.url}` : "";
+          return [{
+            type: "text" as const,
+            text: `[Attached file: ${filename}]${url}`,
+          }];
+        }
+        return [part];
+      });
+
+    return { ...message, parts };
+  });
 
   // In this "ai" package version, convertToModelMessages returns a Promise
   // (it can resolve file parts asynchronously), so it must be awaited before
@@ -307,7 +327,7 @@ export async function POST(req: Request) {
         activePrompt ? `Tone/style to use in your replies: ${activePrompt}.` : "",
       ];
 
-      // Groq's model occasionally emits malformed JSON for a tool call —
+      // The model occasionally emits malformed JSON for a tool call —
       // this got much rarer once big multi-file builds were split into one
       // writeFile call per file, but it can still happen (e.g. one very
       // large single file, or webSearch). Retry once with a lower
@@ -330,30 +350,18 @@ export async function POST(req: Request) {
         const result = streamText({
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           messages: modelMessages,
-          model: groq(groqModelId),
+          model: gemini(geminiModelId),
 
           onError: ({ error }) => {
             console.error(`streamText error (attempt ${attempt}):`, error);
           },
 
-          // The Thinking toggle (see the "Add to chat" sheet) only applies
-          // to gpt-oss tiers (Silicon/Titan) — Groq documents reasoning_effort
-          // as safe for those. Apex (Qwen) uses a different, unconfirmed
-          // mechanism for this on Groq, so it's left alone rather than
-          // risking a rejected request over an unsupported field.
-          ...(modelTierInfo.supportsReasoningEffort
-            ? { providerOptions: { groq: { reasoning_effort: effectiveThinkingEnabled ? "medium" : "low" } } }
-            : {}),
-
-          // Only the first attempt is seeded, so a retry isn't forced to
-          // reproduce the exact same output (and the exact same bug).
-          ...(attempt === 1 ? { seed: 0 } : {}),
 
           // Strips reasoning content from messages before EVERY step of this
           // request's tool-calling loop (not just cross-turn history — see
           // messagesWithoutReasoning above). Multi-step tool calling
           // (stopWhen) feeds each step's own assistant output back in as
-          // input for the next step, and Groq rejects reasoning_content on
+          // input for the next step; keeping reasoning parts out avoids provider-specific validation.
           // ANY assistant message, including one this same request just
           // generated a moment ago.
           prepareStep: ({ messages: stepMessages }) => ({

@@ -8,36 +8,32 @@ export type ModelTierInfo = {
   readonly id: ModelTier;
   readonly name: string;
   readonly description: string;
-  readonly groqModelId: string;
+  readonly geminiModelId: string;
   /** gpt-oss models have documented, safe support for the reasoning_effort
    * param on Groq — used to decide whether the Thinking toggle applies. */
-  readonly supportsReasoningEffort: boolean;
   /** Shown as a small badge next to the name in the picker, if set. */
   readonly badge?: string;
 };
 
 export const MODEL_TIERS: readonly ModelTierInfo[] = [
   {
-    description: "Fast and efficient — quick answers, everyday chat.",
-    groqModelId: "openai/gpt-oss-20b",
+    description: "Fast and efficient — Gemini 2.5 Flash for everyday chat.",
+    geminiModelId: "gemini-2.5-flash",
     id: "silicon",
     name: "Silicon",
-    supportsReasoningEffort: true,
   },
   {
-    description: "Powerful core model for most tasks — the default.",
-    groqModelId: "openai/gpt-oss-120b",
+    description: "Powerful Gemini Flash tier for most tasks — the default.",
+    geminiModelId: "gemini-3.1-flash-lite",
     id: "titan",
     name: "Titan",
-    supportsReasoningEffort: true,
   },
   {
     badge: "Paid usage",
-    description: "Ultimate intelligence — hard math, coding, and dev work.",
-    groqModelId: "qwen/qwen3.8-27b",
+    description: "Top Gemini Flash tier — advanced reasoning, coding, and image understanding.",
+    geminiModelId: "gemini-3.8-flash",
     id: "apex",
     name: "Apex",
-    supportsReasoningEffort: false,
   },
 ] as const;
 

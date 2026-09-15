@@ -222,7 +222,7 @@ export function RextflexChat({
     const text = message.text.trim();
     if (text.length === 0 && message.files.length === 0) return;
     const preparedFiles = message.files;
-    if (preparedFiles.some((file) => file.url?.startsWith("blob:"))) {
+    if (preparedFiles.some((file) => !file.url || file.url.startsWith("blob:"))) {
       return;
     }
 

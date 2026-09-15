@@ -1,7 +1,7 @@
 # RextFlex Ai — Chat UI (standalone)
 
 Ek text-based AI chat app — login, chat history, web search, file upload,
-voice input, personas, share links, aur PWA install, sab ke sath. Groq ke
+voice input, personas, share links, aur PWA install, sab ke sath. Google Gemini ke
 `moonshotai/kimi-k3` model se powered.
 
 ## Setup (poora, ek baar)
@@ -53,13 +53,13 @@ voice input, personas, share links, aur PWA install, sab ke sath. Groq ke
    deploy karne ke baad (HTTPS zaroori hai — Vercel pe automatically hai).
 
 **Rate limiting jaan-bujh kar nahi lagayi** — abhi testing phase hai. Jab
-production mein jao, isko add karna zaroor sochna (Groq key ka misuse na ho).
+production mein jao, isko add karna zaroor sochna (Google Gemini key ka misuse na ho).
 
 ## Baaki sab (pehle se hai)
 
 - `components/ai-elements/` + `components/ui/` — chat UI kit.
 - `components/chat/rextflex-chat.tsx`, `chat-message.tsx` — main chat.
-- `app/api/chat/route.ts` — Groq `llama-3.1-8b-instant`, DB persistence,
+- `app/api/chat/route.ts` — Google Gemini `llama-3.1-8b-instant`, DB persistence,
   webSearch tool, active persona/tone.
 - `lib/auth.ts`, `lib/auth-client.ts` — better-auth (email+password + Google).
 - `components/chat/sidebar.tsx` — chats list (search, rename, delete, share).
