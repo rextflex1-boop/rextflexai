@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@keyframes rainbow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-rainbow-spin {
+  animation: rainbow-spin 3.5s linear infinite;
+}
+
+.animate-slow-aura {
+  animation: rainbow-spin 5.5s linear infinite;
+}
+
+.animate-black-spin {
+  animation: rainbow-spin 3s linear infinite;
+}
+
+/* Glowing Aura for Upgrade Plan Button */
+.upgrade-glow-wrapper {
+  position: relative;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9999px;
+  overflow: visible;
+}
+
+.upgrade-glow-bg {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #3b82f6, #ec4899, #f59e0b, #10b981, #6366f1, #3b82f6);
+  filter: blur(8px);
+  opacity: 0.65;
+  animation: rainbow-spin 5s linear infinite;
+  z-index: 0;
+}
+
+.upgrade-glow-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #3b82f6, #ec4899, #f59e0b, #10b981, #6366f1, #3b82f6);
+  animation: rainbow-spin 5s linear infinite;
+  z-index: 1;
+}
+
+/* 3D Radial Blue Action Button (Screenshot 1 & 7) */
+.radial-blue-btn {
+  background: radial-gradient(circle at 35% 35%, #60a5fa 0%, #2563eb 60%, #1d4ed8 100%);
+  box-shadow: 
+    0 4px 14px 0 rgba(37, 99, 235, 0.4),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -2px 4px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.radial-blue-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 
+    0 6px 18px 0 rgba(37, 99, 235, 0.55),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.8);
+}
+
+.radial-blue-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 8px 0 rgba(37, 99, 235, 0.3);
+}
+
+/* 3D Depth Utilities */
+.btn-3d-white {
+  background: #ffffff;
+  box-shadow: 
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.05),
+    inset 0 -3px 0 0 #e5e7eb,
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.9);
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-3d-white:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 14px 28px -6px rgba(0, 0, 0, 0.12),
+    0 10px 12px -6px rgba(0, 0, 0, 0.06),
+    inset 0 -3px 0 0 #d1d5db,
+    inset 0 1px 2px 0 rgba(255, 255, 255, 1);
+}
+
+.btn-3d-white:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 4px 10px -2px rgba(0, 0, 0, 0.1),
+    inset 0 -1px 0 0 #e5e7eb;
+}
+
+.btn-3d-black {
+  background: #000000;
+  color: #ffffff;
+  box-shadow: 
+    0 10px 25px -4px rgba(0, 0, 0, 0.25),
+    0 6px 10px -4px rgba(0, 0, 0, 0.15),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -3px 0 0 #18181b;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-3d-black:hover {
+  transform: translateY(-2px);
+  background: #111111;
+  box-shadow: 
+    0 14px 30px -4px rgba(0, 0, 0, 0.3),
+    0 8px 12px -4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -3px 0 0 #27272a;
+}
+
+.btn-3d-black:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 4px 10px -2px rgba(0, 0, 0, 0.2),
+    inset 0 -1px 0 0 #18181b;
+}
+
+.input-3d {
+  background: #ffffff;
+  box-shadow: 
+    0 8px 20px -4px rgba(0, 0, 0, 0.08),
+    inset 0 2px 4px 0 rgba(0, 0, 0, 0.04),
+    inset 0 -2px 0 0 #f3f4f6;
+}
