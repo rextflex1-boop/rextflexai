@@ -55,7 +55,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         : await authClient.signIn.email({ email: email.trim(), password, rememberMe: true });
 
       if (result.error) throw new Error(result.error.message || 'Authentication failed.');
-      const sessionResponse = await fetch('/api/me', { credentials: 'include' });
+      const token = (result as any)?.data?.token;
+      if (token) {
+        localStorage.setItem('rextflex_auth_token', token);
+      }
+      const sessionResponse = await fetch('/api/me', {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const sessionData = await sessionResponse.json();
       if (!sessionResponse.ok || !sessionData?.user) throw new Error(sessionData?.error || 'The account session could not be loaded.');
       onLoginSuccess(sessionData.user as User);

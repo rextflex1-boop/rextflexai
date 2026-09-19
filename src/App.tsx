@@ -49,6 +49,7 @@ export default function App() {
 
   const signOut = async () => {
     try {
+      localStorage.removeItem('rextflex_auth_token');
       await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
     } finally {
       setUser(null);

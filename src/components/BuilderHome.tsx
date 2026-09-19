@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
 import { 
   Plus, 
   Mic, 
@@ -18,6 +19,64 @@ import { GeneralSettingsModal } from './GeneralSettingsModal';
 import { ModelSelectorModal, AVAILABLE_MODELS } from './ModelSelectorModal';
 import { WebsitePreview } from './WebsitePreview';
 import { api } from '../lib/api';
+
+function formatTimestamp(ts?: string | Date): string {
+  if (!ts) return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return String(ts);
+  }
+}
+
+function parseSessionMessages(rawRows: any[]): ChatMessage[] {
+  if (!Array.isArray(rawRows)) return [];
+  return rawRows
+    .map((row) => {
+      const raw = typeof row.message === 'object' && row.message !== null ? row.message : (() => {
+        try { return JSON.parse(row.message); } catch { return { text: String(row.message || '') }; }
+      })();
+
+      let text = '';
+      if (typeof raw.text === 'string') text = raw.text;
+      else if (typeof raw.content === 'string') text = raw.content;
+      else if (Array.isArray(raw.parts)) {
+        text = raw.parts
+          .filter((p: any) => p && (typeof p.text === 'string' || typeof p.content === 'string'))
+          .map((p: any) => p.text || p.content)
+          .join(' ')
+          .trim();
+      }
+
+      const role: 'user' | 'model' =
+        row.role === 'assistant' || raw.role === 'assistant' || raw.role === 'model'
+          ? 'model'
+          : 'user';
+
+      let cleanText = text
+        .replace(/```(?:html|xml|css|js)?\s*```/gi, '')
+        .replace(/```+\s*$/g, '')
+        .replace(/^\s*```+/g, '')
+        .trim();
+
+      if (role === 'model' && (!cleanText || cleanText === '```')) {
+        cleanText = raw.generatedWebsiteHtml
+          ? 'Maine aapka website layout aur code generate kar diya hai! Neeche button se Live Build dekh sakte hain.'
+          : 'Main aapki website banane ke liye ready hoon! Batayein kaisa website design karna hai?';
+      }
+
+      return {
+        id: raw.id || row.id,
+        role,
+        text: cleanText,
+        timestamp: formatTimestamp(raw.timestamp || row.created_at),
+        generatedWebsiteHtml: raw.generatedWebsiteHtml,
+      } as ChatMessage;
+    })
+    .filter((m) => m.role === 'model' || m.text.trim().length > 0);
+}
 
 interface BuilderHomeProps {
   userEmail?: string;
@@ -48,6 +107,7 @@ export function BuilderHome({
   const [userAvatar, setUserAvatar] = useState<string | undefined>(initialAvatarUrl);
   const [creditsRemaining, setCreditsRemaining] = useState(15);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionsList, setSessionsList] = useState<Array<{ id: string; title?: string; updated_at?: string; created_at?: string }>>([]);
 
   // Chat & Website builder states: start clean so only real user messages appear
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -72,38 +132,81 @@ export function BuilderHome({
         const model = AVAILABLE_MODELS.find((m) => m.id === me.modelTier);
         if (model) setSelectedModel(model);
 
-        const sessions = await api<{ sessions: Array<{ id: string; title?: string }> }>('/api/sessions');
+        const sessions = await api<{ sessions: Array<{ id: string; title?: string; updated_at?: string; created_at?: string }> }>('/api/sessions');
         if (cancelled) return;
+        setSessionsList(sessions.sessions || []);
+
         let current = sessions.sessions[0];
         if (!current) {
-          const created = await api<{ session: { id: string; title: string } }>('/api/sessions', {
+          const created = await api<{ session: { id: string; title: string; created_at?: string; updated_at?: string } }>('/api/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: 'New conversation' }),
           });
           current = created.session;
+          setSessionsList([created.session]);
         }
         setSessionId(current.id);
-        const detail = await api<{ messages: Array<{ id: string; role: string; message: ChatMessage }> }>(`/api/sessions/${current.id}`);
-        const restored = detail.messages.map((row) => {
-          const msg: any = row.message || {};
-          return {
-            id: msg.id || row.id,
-            role: msg.role === 'assistant' ? 'model' : msg.role,
-            text: msg.text || '',
-            timestamp: msg.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            generatedWebsiteHtml: msg.generatedWebsiteHtml,
-          } as ChatMessage;
-        });
+        const detail = await api<{ messages: Array<{ id: string; role: string; message: any; created_at: string }> }>(`/api/sessions/${current.id}`);
+        const restored = parseSessionMessages(detail.messages);
+
         setMessages(restored);
         const lastBuild = [...restored].reverse().find((m) => m.generatedWebsiteHtml);
-        if (lastBuild?.generatedWebsiteHtml) setGeneratedHtml(lastBuild.generatedWebsiteHtml);
+        if (lastBuild?.generatedWebsiteHtml) setGeneratedHtml(lastBuild?.generatedWebsiteHtml);
       } catch (error) {
         console.error('Failed to load account data:', error);
       }
     })();
     return () => { cancelled = true; };
   }, [onUserUpdated]);
+
+  const handleSelectProject = async (targetSessionId: string) => {
+    if (targetSessionId === sessionId) return;
+    setSessionId(targetSessionId);
+    try {
+      const detail = await api<{ messages: Array<{ id: string; role: string; message: any; created_at: string }> }>(`/api/sessions/${targetSessionId}`);
+      const restored = parseSessionMessages(detail.messages);
+      setMessages(restored);
+      const lastBuild = [...restored].reverse().find((m) => m.generatedWebsiteHtml);
+      setGeneratedHtml(lastBuild?.generatedWebsiteHtml);
+    } catch (err) {
+      console.error('Failed to load project session:', err);
+    }
+  };
+
+  const handleCreateNewProject = async () => {
+    try {
+      const created = await api<{ session: { id: string; title: string; created_at?: string; updated_at?: string } }>('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'New Project' }),
+      });
+      setSessionsList((prev) => [created.session, ...prev.filter((s) => s.id !== created.session.id)]);
+      setSessionId(created.session.id);
+      setMessages([]);
+      setGeneratedHtml(undefined);
+      setActiveTab('chat');
+    } catch (err) {
+      console.error('Failed to create new project:', err);
+    }
+  };
+
+  const handleDeleteProject = async (targetSessionId: string) => {
+    try {
+      await api(`/api/sessions/${targetSessionId}`, { method: 'DELETE' });
+      const remaining = sessionsList.filter((s) => s.id !== targetSessionId);
+      setSessionsList(remaining);
+      if (sessionId === targetSessionId) {
+        if (remaining.length > 0) {
+          handleSelectProject(remaining[0].id);
+        } else {
+          handleCreateNewProject();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+    }
+  };
 
   // Auto-scroll chat when message added
   useEffect(() => {
@@ -127,7 +230,7 @@ export function BuilderHome({
       id: `user-${Date.now()}`,
       role: 'user',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: formatTimestamp(new Date()),
     };
 
     const newMessages = [...messages, userMsg];
@@ -148,17 +251,47 @@ export function BuilderHome({
       });
 
       setSessionId(data.sessionId);
+      setSessionsList((prev) => {
+        const found = prev.find((s) => s.id === data.sessionId);
+        if (found) {
+          return prev.map((s) =>
+            s.id === data.sessionId
+              ? {
+                  ...s,
+                  title: (s.title === 'New conversation' || s.title === 'New Project') ? text.slice(0, 40) : s.title,
+                  updated_at: new Date().toISOString()
+                }
+              : s
+          );
+        }
+        return [{ id: data.sessionId, title: text.slice(0, 40), updated_at: new Date().toISOString() }, ...prev];
+      });
+
+      let cleanReply = (data.reply || '').trim();
+      cleanReply = cleanReply
+        .replace(/```(?:html|xml|css|js)?\s*```/gi, '')
+        .replace(/```+\s*$/g, '')
+        .replace(/^\s*```+/g, '')
+        .trim();
+
+      if (!cleanReply || cleanReply === '```') {
+        cleanReply = data.generatedWebsiteHtml
+          ? 'Maine aapka website layout aur code generate kar diya hai! Neeche button se Live Build dekh sakte hain.'
+          : 'Maine aapka update complete kar diya hai.';
+      }
+
       const modelReply: ChatMessage = {
         id: `model-${Date.now()}`,
         role: 'model',
-        text: data.reply || '',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: cleanReply,
+        timestamp: formatTimestamp(new Date()),
         generatedWebsiteHtml: data.generatedWebsiteHtml,
       };
       setMessages((prev) => [...prev, modelReply]);
 
       if (data.generatedWebsiteHtml) {
         setGeneratedHtml(data.generatedWebsiteHtml);
+        // Automatically switch to Build tab so the user immediately sees the live preview
         setActiveTab('build');
       }
       setCreditsRemaining((prev) => Math.max(0, prev - 1));
@@ -167,8 +300,8 @@ export function BuilderHome({
       const errorReply: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'model',
-        text: `Request complete nahi ho saka: ${err?.message || 'server error'}. API keys aur Railway environment variables check karo.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: `Request complete nahi ho saka: ${err?.message || 'server error'}. Kripya dobara try karein.`,
+        timestamp: formatTimestamp(new Date()),
       };
       setMessages((prev) => [...prev, errorReply]);
     } finally {
@@ -201,7 +334,9 @@ export function BuilderHome({
       />
 
       {/* Main Dynamic Body (Chat vs Build) */}
-      <main className="flex-1 flex flex-col overflow-hidden max-w-3xl w-full mx-auto px-4 relative">
+      <main className={`flex-1 flex flex-col overflow-hidden w-full mx-auto px-3 sm:px-4 relative transition-all duration-300 ${
+        activeTab === 'build' ? 'max-w-7xl' : 'max-w-3xl'
+      }`}>
         {activeTab === 'chat' ? (
           <div className="flex-1 flex flex-col justify-between pt-2 pb-3 overflow-hidden">
             {/* Chat Conversation Scroll Area */}
@@ -221,6 +356,8 @@ export function BuilderHome({
               ) : (
                 messages.map((m) => {
                   const isUser = m.role === 'user';
+                  if (isUser && !m.text?.trim()) return null;
+
                   return (
                     <div
                       key={m.id}
@@ -228,31 +365,46 @@ export function BuilderHome({
                     >
                       {/* User Bubble */}
                       {isUser ? (
-                        <div className="max-w-[85%] px-5 py-3 rounded-2xl bg-zinc-100/90 text-zinc-900 text-sm font-normal shadow-xs border border-zinc-200/60">
+                        <div className="max-w-[85%] px-5 py-3 rounded-2xl bg-zinc-100/90 text-zinc-900 text-sm font-normal shadow-xs border border-zinc-200/60 break-words whitespace-pre-wrap">
                           {m.text}
                         </div>
                       ) : (
                         /* Bot Bubble: Blue Dot + RextFlex Ai */
-                        <div className="max-w-[95%] space-y-2">
+                        <div className="max-w-[95%] space-y-2.5">
                           <div className="flex items-center gap-2">
                             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-xs"></span>
                             <span className="font-semibold text-xs text-zinc-900 tracking-tight">
                               RextFlex Ai
                             </span>
-                            <span className="text-[10px] text-zinc-400">{m.timestamp}</span>
+                            <span className="text-[10px] text-zinc-400">{formatTimestamp(m.timestamp)}</span>
                           </div>
-                          <div className="text-zinc-800 text-sm leading-relaxed whitespace-pre-wrap pl-4">
-                            {m.text}
+
+                          <div className="text-zinc-800 text-sm leading-relaxed pl-4">
+                            <div className="markdown-body prose prose-sm max-w-none text-zinc-800">
+                              <Markdown>{m.text}</Markdown>
+                            </div>
                           </div>
+
                           {m.generatedWebsiteHtml && (
-                            <div className="pl-4 pt-1">
+                            <div className="ml-4 mt-2 p-3 rounded-2xl bg-blue-50/80 border border-blue-200/80 flex items-center justify-between gap-3 shadow-xs">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                                  <Sparkles className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-zinc-900 truncate">Website Live Preview Ready</p>
+                                  <p className="text-[11px] text-zinc-500 truncate">Website code successfully generated</p>
+                                </div>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => setActiveTab('build')}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 text-xs font-semibold hover:bg-blue-100 transition cursor-pointer"
+                                onClick={() => {
+                                  if (m.generatedWebsiteHtml) setGeneratedHtml(m.generatedWebsiteHtml);
+                                  setActiveTab('build');
+                                }}
+                                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold shadow-xs transition cursor-pointer shrink-0"
                               >
-                                <Sparkles className="w-3.5 h-3.5" />
-                                <span>Live Build Dekhein</span>
+                                View Live Build →
                               </button>
                             </div>
                           )}
@@ -412,13 +564,16 @@ export function BuilderHome({
             id="tab-btn-build"
             type="button"
             onClick={() => setActiveTab('build')}
-            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition active:scale-98 cursor-pointer text-center ${
+            className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition active:scale-98 cursor-pointer text-center flex items-center justify-center gap-1.5 ${
               activeTab === 'build'
                 ? 'bg-white text-blue-600 border border-blue-300 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
-            Build
+            <span>Build</span>
+            {generatedHtml && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shadow-xs" title="Live build preview available" />
+            )}
           </button>
         </div>
       </footer>
@@ -435,7 +590,15 @@ export function BuilderHome({
         }}
         onUpgradeClick={() => setIsSettingsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        projectName={messages.length > 0 ? messages[0].text.slice(0, 20) : 'My Project'}
+        projectName={
+          sessionsList.find((s) => s.id === sessionId)?.title ||
+          (messages.length > 0 ? messages[0].text.slice(0, 30) : 'Projects')
+        }
+        projects={sessionsList}
+        activeProjectId={sessionId}
+        onSelectProject={handleSelectProject}
+        onCreateNewProject={handleCreateNewProject}
+        onDeleteProject={handleDeleteProject}
       />
 
       {/* User Menu Dropdown */}
