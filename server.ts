@@ -237,35 +237,27 @@ async function findUserFromDatabaseToken(token: string) {
 }
 
 async function getSessionUser(req: express.Request) {
+  // Use Better Auth's own session verifier as the source of truth. The
+  // Bearer plugin is specifically designed to make auth.api.getSession()
+  // accept the Authorization: Bearer <session-token> header, and it also
+  // handles the normal Better Auth cookie session. This avoids duplicating
+  // session validation logic and, importantly, avoids rejecting a valid
+  // session when our raw SQL representation differs from Better Auth's
+  // internal adapter behavior.
+  try {
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+      query: { disableCookieCache: true },
+    });
+    if (session?.user) return session.user;
+  } catch (error: any) {
+    console.warn('[AI Studio] Better Auth session verification failed:', error?.message || error);
+  }
+
+  // Last-resort database lookup keeps existing sessions usable if a transient
+  // Better Auth adapter error occurs, but it is no longer the primary path.
   const token = getSessionToken(req);
-
-  // Prefer the database session lookup for application APIs. This makes
-  // authentication resilient to stale/broken Better Auth cookies and also
-  // lets our Bearer token path work even when a browser still has an old
-  // cookie from an earlier deployment.
-  if (token && pool) {
-    const user = await findUserFromDatabaseToken(token);
-    if (user) return user;
-
-    // If a token was explicitly supplied but is no longer present in the
-    // session table, treat it as unauthenticated without calling
-    // Better Auth again. This avoids repeated FAILED_TO_GET_SESSION errors.
-    return null;
-  }
-
-  // Database-less development fallback. Better Auth remains the source of
-  // truth when no PostgreSQL connection is configured.
-  if (!token || !pool) {
-    try {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-        query: { disableCookieCache: true },
-      });
-      return session?.user ?? null;
-    } catch {
-      return null;
-    }
-  }
+  if (token && pool) return findUserFromDatabaseToken(token);
 
   return null;
 }
@@ -654,47 +646,19 @@ async function main() {
   // Better Auth MUST be mounted before express.json() so it can read request bodies itself.
   const authHandler = toNodeHandler(auth);
 
-  // Stable session endpoint for the RextFlex client. A stale/invalid browser
-  // cookie must not turn a harmless session check into a Better Auth 500.
-  // When PostgreSQL is available, validate the bearer/cookie token directly.
+  // Let Better Auth handle get-session directly so its cookie/Bearer
+  // session semantics stay identical to the sign-in flow.
   app.all('/api/auth/get-session', async (req, res, next) => {
-    if (!pool) return authHandler(req, res, next);
     try {
-      const token = getSessionToken(req);
-      if (!token) return res.status(200).json(null);
-      const result = await pool.query(
-        `select
-           s.id, s."expiresAt", s.token, s."createdAt", s."updatedAt",
-           s."ipAddress", s."userAgent", s."userId",
-           u.id as "user_id", u.name as "user_name", u.email as "user_email", u.image as "user_image"
-         from "session" s
-         inner join "user" u on u.id=s."userId"
-         where s.token=$1 and s."expiresAt" > now()
-         limit 1`,
-        [token],
-      );
-      const row = result.rows[0];
-      if (!row) return res.status(200).json(null);
-      return res.status(200).json({
-        session: {
-          id: row.id,
-          expiresAt: row.expiresAt,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          ipAddress: row.ipAddress,
-          userAgent: row.userAgent,
-          userId: row.userId,
-        },
-        user: {
-          id: row.user_id,
-          name: row.user_name,
-          email: row.user_email,
-          image: row.user_image,
-        },
-      });
+      await authHandler(req, res, next);
     } catch (error: any) {
-      console.error('[AI Studio] Stable get-session failed:', error?.message || error);
-      return res.status(200).json(null);
+      console.error('[AI Studio] Better Auth get-session failure', {
+        method: req.method,
+        path: req.path,
+        message: error?.message || String(error),
+        code: error?.code,
+      });
+      if (!res.headersSent) res.status(500).json({ error: 'Authentication service error' });
     }
   });
 
@@ -734,7 +698,13 @@ async function main() {
   app.get('/api/me', async (req, res) => {
     try {
       const user = await getSessionUser(req);
-      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      if (!user) {
+        console.warn('[AI Studio] /api/me unauthorized', {
+          hasBearer: Boolean(getBearerToken(req)),
+          hasCookie: Boolean(getCookie(req, 'better-auth.session_token') || getCookie(req, '__Secure-better-auth.session_token')),
+        });
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const tier = await getUserModelTier(user.id);
       res.json({ user, modelTier: tier });
     } catch (error: any) {
@@ -745,19 +715,17 @@ async function main() {
 
   app.post('/api/logout', async (req, res) => {
     try {
-      const token = getSessionToken(req);
-      if (pool && token) {
-        await pool.query('delete from "session" where token=$1', [token]);
-      }
-      res.setHeader('Set-Cookie', [
-        'better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax',
-        '__Secure-better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax',
-      ]);
-      res.json({ success: true });
+      await auth.api.signOut({ headers: fromNodeHeaders(req.headers) });
     } catch (error: any) {
-      console.error('POST /api/logout', error);
-      res.status(500).json({ error: error?.message || 'Failed to sign out' });
+      // A stale/expired token is already logged out from the client's point of
+      // view, so keep logout idempotent rather than surfacing a 500.
+      console.warn('[AI Studio] Better Auth sign-out cleanup:', error?.message || error);
     }
+    res.setHeader('Set-Cookie', [
+      'better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax',
+      '__Secure-better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax',
+    ]);
+    res.json({ success: true });
   });
 
   app.post('/api/profile', async (req, res) => {

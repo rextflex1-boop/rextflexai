@@ -75,14 +75,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       if (result.error) throw new Error(result.error.message || 'Authentication failed.');
       // The auth client persists the Bearer token from the Better Auth
       // `set-auth-token` response header via its global onSuccess handler.
-      const token = localStorage.getItem('rextflex_auth_token');
-      const sessionResponse = await fetch('/api/me', {
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      // Re-read the freshly-created session through Better Auth itself.
+      // This uses the same Bearer/cookie verification path as the auth server
+      // instead of relying on a second custom API endpoint immediately after login.
+      const sessionResult = await authClient.getSession({
+        query: { disableCookieCache: true },
       });
-      const sessionData = await sessionResponse.json();
-      if (!sessionResponse.ok || !sessionData?.user) throw new Error(sessionData?.error || 'The account session could not be loaded.');
-      onLoginSuccess(sessionData.user as User);
+      if (sessionResult.error || !sessionResult.data?.user) {
+        throw new Error(sessionResult.error?.message || 'The account session could not be loaded.');
+      }
+      onLoginSuccess(sessionResult.data.user as User);
     } catch (error: any) {
       showError(error?.message || 'Authentication failed.');
     } finally {

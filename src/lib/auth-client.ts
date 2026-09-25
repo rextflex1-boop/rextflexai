@@ -3,6 +3,7 @@ import { createAuthClient } from 'better-auth/react';
 export const authClient = createAuthClient({
   baseURL: window.location.origin,
   fetchOptions: {
+    credentials: 'include',
     // Better Auth Bearer plugin returns the session token in the
     // `set-auth-token` response header. Persist it so every app API
     // request can authenticate independently of a stale browser cookie.
@@ -10,6 +11,11 @@ export const authClient = createAuthClient({
       const authToken = ctx.response.headers.get('set-auth-token');
       if (authToken) {
         localStorage.setItem('rextflex_auth_token', authToken);
+      }
+    },
+    onError: (ctx) => {
+      if (ctx.response?.status === 401) {
+        localStorage.removeItem('rextflex_auth_token');
       }
     },
     auth: {
