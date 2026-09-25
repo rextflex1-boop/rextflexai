@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
-import { Pool } from '@neondatabase/serverless';
+import { Pool } from 'pg';
 import { auth } from './auth.js';
 
 // Load Railway/local environment variables before auth/database are used.
@@ -18,7 +18,12 @@ const databaseUrl = process.env.DATABASE_URL;
 let pool: Pool | null = null;
 if (databaseUrl) {
   try {
-    pool = new Pool({ connectionString: databaseUrl });
+    pool = new Pool({
+      connectionString: databaseUrl,
+      max: 10,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+    });
   } catch (err) {
     console.warn('[AI Studio] Could not initialize PostgreSQL pool:', err);
   }
@@ -31,6 +36,19 @@ if (databaseUrl) {
  */
 async function ensureDatabaseSchema() {
   if (!pool) return;
+
+  await pool.query('select 1');
+
+  // Let Better Auth apply its own canonical core schema/migrations first.
+  // This keeps the auth database synchronized with the installed Better Auth version.
+  try {
+    const { getMigrations } = await import('better-auth/db/migration');
+    const { runMigrations } = await getMigrations(auth.options);
+    await runMigrations();
+    console.log('[AI Studio] Better Auth migrations verified.');
+  } catch (error: any) {
+    console.warn('[AI Studio] Better Auth migration check skipped:', error?.message || error);
+  }
 
   await pool.query(`
     create table if not exists "user" (
@@ -617,7 +635,67 @@ async function main() {
   app.set('trust proxy', true);
 
   // Better Auth MUST be mounted before express.json() so it can read request bodies itself.
-  app.all('/api/auth/*', toNodeHandler(auth));
+  const authHandler = toNodeHandler(auth);
+
+  // Stable session endpoint for the RextFlex client. A stale/invalid browser
+  // cookie must not turn a harmless session check into a Better Auth 500.
+  // When PostgreSQL is available, validate the bearer/cookie token directly.
+  app.all('/api/auth/get-session', async (req, res, next) => {
+    if (!pool) return authHandler(req, res, next);
+    try {
+      const token = getSessionToken(req);
+      if (!token) return res.status(200).json(null);
+      const result = await pool.query(
+        `select
+           s.id, s."expiresAt", s.token, s."createdAt", s."updatedAt",
+           s."ipAddress", s."userAgent", s."userId",
+           u.id as "user_id", u.name as "user_name", u.email as "user_email", u.image as "user_image"
+         from "session" s
+         inner join "user" u on u.id=s."userId"
+         where s.token=$1 and s."expiresAt" > now()
+         limit 1`,
+        [token],
+      );
+      const row = result.rows[0];
+      if (!row) return res.status(200).json(null);
+      return res.status(200).json({
+        session: {
+          id: row.id,
+          expiresAt: row.expiresAt,
+          token: row.token,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          ipAddress: row.ipAddress,
+          userAgent: row.userAgent,
+          userId: row.userId,
+        },
+        user: {
+          id: row.user_id,
+          name: row.user_name,
+          email: row.user_email,
+          image: row.user_image,
+        },
+      });
+    } catch (error: any) {
+      console.error('[AI Studio] Stable get-session failed:', error?.message || error);
+      return res.status(200).json(null);
+    }
+  });
+
+  app.all('/api/auth/*', async (req, res, next) => {
+    try {
+      await authHandler(req, res, next);
+    } catch (error: any) {
+      console.error('[AI Studio] Better Auth route failure', {
+        method: req.method,
+        path: req.path,
+        message: error?.message || String(error),
+        code: error?.code,
+        cause: error?.cause?.message || error?.cause,
+      });
+      if (!res.headersSent) res.status(500).json({ error: 'Authentication service error' });
+    }
+  });
 
   app.use(express.json({ limit: '12mb' }));
 

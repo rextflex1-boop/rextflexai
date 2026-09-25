@@ -1,40 +1,15 @@
 # RextFlex Ai — Railway Auth Setup
 
 ## Required Railway Variables
+- `DATABASE_URL` — Neon/PostgreSQL connection string
+- `BETTER_AUTH_URL=https://rextflexai.up.railway.app`
+- `BETTER_AUTH_SECRET` — long random secret; keep stable across deployments
 
-Set these on the `production` environment:
+## Optional
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `AUTH_DEBUG=1` only while diagnosing Better Auth; remove/disable after debugging.
 
-```text
-BETTER_AUTH_SECRET=<long-random-secret>
-BETTER_AUTH_URL=https://rextflexai.up.railway.app
-DATABASE_URL=<your Neon PostgreSQL connection string>
-GROQ_API_KEY=<your Groq key>
-```
+The backend uses the standard `pg.Pool` driver for Better Auth and runs Better Auth's canonical migrations at startup. Custom RextFlex tables are also created idempotently.
 
-## Optional Google OAuth
-
-Google sign-in is enabled only when both variables are present:
-
-```text
-GOOGLE_CLIENT_ID=<Google OAuth client ID>
-GOOGLE_CLIENT_SECRET=<Google OAuth client secret>
-```
-
-Google callback URL:
-
-```text
-https://rextflexai.up.railway.app/api/auth/callback/google
-```
-
-When the Google variables are missing, the login screen disables the Google button instead of sending a request that produces `Provider not found`.
-
-## Database
-
-The server now checks and creates/repairs the Better Auth core tables and the RextFlex app tables during startup. This is idempotent and runs before the HTTP server begins accepting requests.
-
-## After deploying
-
-1. Open the Railway deployment.
-2. Wait until the log shows `Database schema verified.` and `RextFlex Ai running on http://0.0.0.0:<port>`.
-3. In the browser, clear the old RextFlex auth token/cookies by signing out or using a fresh private tab.
-4. Use Email Login/Signup for the first verification. Enable Google OAuth variables separately when you are ready to use Google sign-in.
+Google sign-in is disabled in the UI when credentials are absent; email/password login remains available.

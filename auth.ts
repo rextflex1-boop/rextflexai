@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { Pool } from '@neondatabase/serverless';
+import { Pool } from 'pg';
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins';
 
@@ -28,31 +28,22 @@ function getSecret() {
 
 const baseURL = getBaseUrl();
 
+const productionOrigin = baseURL ? new URL(baseURL).origin : null;
+const trustedOrigins = Array.from(new Set([
+  productionOrigin,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://*.run.app',
+  'https://*.aistudio.google.com',
+  'https://ai.studio',
+  'https://*.ai.studio',
+].filter(Boolean) as string[]));
+
 export const auth = betterAuth({
   ...(baseURL ? { baseURL } : {}),
   secret: getSecret(),
   database: dbPool,
-  trustedOrigins: async (request) => {
-    const list = [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://*.run.app',
-      'https://*.aistudio.google.com',
-      'https://ai.studio',
-      'https://*.ai.studio',
-      'https://*.google.com',
-      'https://*',
-    ];
-    if (request && typeof request.headers?.get === 'function') {
-      const origin = request.headers.get('origin') || request.headers.get('referer');
-      if (origin) {
-        try {
-          list.push(new URL(origin).origin);
-        } catch {}
-      }
-    }
-    return list;
-  },
+  trustedOrigins,
   emailAndPassword: {
     enabled: true,
   },
@@ -70,18 +61,26 @@ export const auth = betterAuth({
     additionalFields: {},
   },
   advanced: {
-    // Railway's edge proxy provides X-Real-IP as the authoritative client IP.
-    // Using it avoids Better Auth treating the comma-separated X-Forwarded-For
-    // chain as ambiguous and falling back to one shared rate-limit bucket.
     ipAddress: {
       ipAddressHeaders: ['x-real-ip'],
     },
-    // When BETTER_AUTH_URL/APP_URL is not provided, trust Railway's forwarded
-    // host/proto headers so OAuth callbacks and redirects use the public origin.
     ...(baseURL ? {} : { trustedProxyHeaders: true }),
     defaultCookieAttributes: {
-      sameSite: 'none',
-      secure: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
+  },
+  logger: {
+    level: process.env.AUTH_DEBUG === '1' ? 'debug' : 'warn',
+    log: (level, message, ...args) => {
+      const safeArgs = args.map((arg) => {
+        if (arg instanceof Error) return { name: arg.name, message: arg.message, stack: arg.stack };
+        if (arg && typeof arg === 'object') {
+          try { return JSON.parse(JSON.stringify(arg)); } catch { return String(arg); }
+        }
+        return arg;
+      });
+      console[level === 'debug' ? 'debug' : level === 'info' ? 'info' : level === 'warn' ? 'warn' : 'error']('[Better Auth]', message, ...safeArgs);
     },
   },
 });
