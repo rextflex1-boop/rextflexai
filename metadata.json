@@ -1,0 +1,6 @@
+{
+  "name": "RextFlex Ai",
+  "description": "RextFlex Ai - Next-generation AI platform login and workspace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
