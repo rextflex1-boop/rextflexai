@@ -13,3 +13,7 @@
 The backend uses the standard `pg.Pool` driver for Better Auth and runs Better Auth's canonical migrations at startup. Custom RextFlex tables are also created idempotently.
 
 Google sign-in is disabled in the UI when credentials are absent; email/password login remains available.
+
+
+## PostgreSQL SSL configuration
+Railway `DATABASE_URL` may still use `sslmode=require`; the application normalizes that value to `sslmode=verify-full` at runtime while preserving `channel_binding=require`. You do not need to put the database password into the repository or ZIP.

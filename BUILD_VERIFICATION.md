@@ -1,15 +1,11 @@
-# RextFlex Ai — Production Verification
+# RextFlex AI Production Verification
 
-Date: 2026-09-25
+- 18 TypeScript/TSX source files successfully transpiled with TypeScript's compiler API.
+- Supplied database password was not written into the project or ZIP.
+- DATABASE_URL runtime normalization verified: `sslmode=require` becomes `sslmode=verify-full` while preserving `channel_binding=require`.
+- Custom `/api/auth/get-session` response no longer exposes the Better Auth session token.
+- `npm install` could not be completed in this sandbox because access to the npm registry timed out; therefore a full local production bundle could not be built here.
+- The public Railway host could not be reached from this sandbox because DNS/network access is restricted.
 
-## Static verification completed
-- All 18 TypeScript/TSX source files parsed successfully with TypeScript compiler parser.
-- `package.json` parses successfully.
-- Better Auth config uses the standard `pg` driver and exact/approved trusted origins.
-- Better Auth canonical migrations are invoked at startup.
-- Standard Better Auth session refresh behavior is preserved.
-- Stale session checks are handled by the stable `/api/auth/get-session` route.
-- Google sign-in remains opt-in via `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`.
-
-## Production build note
-A full `npm install && npm run build` could not be executed in this sandbox because the npm registry was not reachable from the build environment. Railway will perform the authoritative dependency installation and production build from `railway.json`.
+Railway itself should run the repository's configured production command:
+`npm install && npm run build`, then `npm start`.

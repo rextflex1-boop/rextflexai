@@ -4,7 +4,24 @@ import { Pool } from 'pg';
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins';
 
-const databaseUrl = process.env.DATABASE_URL;
+function normalizeDatabaseUrl(raw: string | undefined) {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    // Neon/Railway currently accept sslmode=require, but node-postgres is
+    // warning that its interpretation will change in a future major release.
+    // Normalize to the explicit libpq-compatible verify-full mode while
+    // preserving channel_binding=require and every other query parameter.
+    if (url.searchParams.get('sslmode') === 'require') {
+      url.searchParams.set('sslmode', 'verify-full');
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
 let dbPool: Pool | undefined = undefined;
 if (databaseUrl) {

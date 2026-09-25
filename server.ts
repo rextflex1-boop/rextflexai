@@ -14,7 +14,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3000);
 
-const databaseUrl = process.env.DATABASE_URL;
+function normalizeDatabaseUrl(raw: string | undefined) {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    // Neon/Railway currently accept sslmode=require, but node-postgres is
+    // warning that its interpretation will change in a future major release.
+    // Normalize to the explicit libpq-compatible verify-full mode while
+    // preserving channel_binding=require and every other query parameter.
+    if (url.searchParams.get('sslmode') === 'require') {
+      url.searchParams.set('sslmode', 'verify-full');
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 let pool: Pool | null = null;
 if (databaseUrl) {
   try {
@@ -662,7 +679,6 @@ async function main() {
         session: {
           id: row.id,
           expiresAt: row.expiresAt,
-          token: row.token,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           ipAddress: row.ipAddress,
