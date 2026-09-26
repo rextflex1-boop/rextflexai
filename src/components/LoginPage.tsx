@@ -75,16 +75,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       if (result.error) throw new Error(result.error.message || 'Authentication failed.');
       // The auth client persists the Bearer token from the Better Auth
       // `set-auth-token` response header via its global onSuccess handler.
-      // Re-read the freshly-created session through Better Auth itself.
-      // This uses the same Bearer/cookie verification path as the auth server
-      // instead of relying on a second custom API endpoint immediately after login.
-      const sessionResult = await authClient.getSession({
-        query: { disableCookieCache: true },
-      });
-      if (sessionResult.error || !sessionResult.data?.user) {
-        throw new Error(sessionResult.error?.message || 'The account session could not be loaded.');
+      // The sign-in/sign-up response already contains the authenticated user,
+      // so do not perform a second session DB lookup here. The app will verify
+      // the stored bearer token on its normal /api/me request.
+      if (!result.data?.user) {
+        throw new Error('Authentication succeeded but no user profile was returned.');
       }
-      onLoginSuccess(sessionResult.data.user as User);
+      onLoginSuccess(result.data.user as User);
     } catch (error: any) {
       showError(error?.message || 'Authentication failed.');
     } finally {

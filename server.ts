@@ -6,8 +6,7 @@ import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
-import { Pool } from 'pg';
-import { auth } from './auth.js';
+import { auth, dbPool } from './auth.js';
 import Sandbox from 'e2b';
 
 // Load Railway/local environment variables before auth/database are used.
@@ -17,36 +16,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3000);
 
-function normalizeDatabaseUrl(raw: string | undefined) {
-  if (!raw) return undefined;
-  try {
-    const url = new URL(raw);
-    // Neon/Railway currently accept sslmode=require, but node-postgres is
-    // warning that its interpretation will change in a future major release.
-    // Normalize to the explicit libpq-compatible verify-full mode while
-    // preserving channel_binding=require and every other query parameter.
-    if (url.searchParams.get('sslmode') === 'require') {
-      url.searchParams.set('sslmode', 'verify-full');
-    }
-    return url.toString();
-  } catch {
-    return raw;
-  }
-}
+const pool = dbPool ?? null;
 
-const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
-let pool: Pool | null = null;
-if (databaseUrl) {
-  try {
-    pool = new Pool({
-      connectionString: databaseUrl,
-      max: 10,
-      idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 10000,
-    });
-  } catch (err) {
-    console.warn('[AI Studio] Could not initialize PostgreSQL pool:', err);
+async function queryWithRetry<T = any>(query: string, values: any[] = [], attempts = 2): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      if (!pool) throw new Error('PostgreSQL pool is unavailable.');
+      return await pool.query(query, values) as T;
+    } catch (error: any) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const retryable = /ETIMEDOUT|ECONNRESET|ECONNREFUSED|connection terminated|Connection terminated|EPIPE/i.test(message);
+      if (!retryable || attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 350 * attempt));
+    }
   }
+  throw lastError;
 }
 
 /**
@@ -605,7 +591,7 @@ function getSessionToken(req: express.Request): string | null {
 async function findUserFromDatabaseToken(token: string) {
   if (!pool) return null;
   try {
-    const result = await pool.query(
+    const result = await queryWithRetry(
       `select u.id,u.name,u.email,u.image
        from "session" s
        inner join "user" u on u.id=s."userId"
@@ -621,13 +607,19 @@ async function findUserFromDatabaseToken(token: string) {
 }
 
 async function getSessionUser(req: express.Request) {
-  // Use Better Auth's own session verifier as the source of truth. The
-  // Bearer plugin is specifically designed to make auth.api.getSession()
-  // accept the Authorization: Bearer <session-token> header, and it also
-  // handles the normal Better Auth cookie session. This avoids duplicating
-  // session validation logic and, importantly, avoids rejecting a valid
-  // session when our raw SQL representation differs from Better Auth's
-  // internal adapter behavior.
+  const bearerToken = getBearerToken(req);
+
+  // App API requests always carry the Better Auth bearer token. Verify it
+  // directly against our shared PostgreSQL pool first. This keeps normal
+  // application traffic independent from an extra Kysely connection checkout
+  // and avoids turning a transient Better Auth adapter timeout into a 401.
+  if (bearerToken && pool) {
+    const user = await findUserFromDatabaseToken(bearerToken);
+    if (user) return user;
+  }
+
+  // Fall back to Better Auth for cookie-based requests and for any token that
+  // was not found by the direct lookup.
   try {
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.headers),
@@ -638,11 +630,8 @@ async function getSessionUser(req: express.Request) {
     console.warn('[AI Studio] Better Auth session verification failed:', error?.message || error);
   }
 
-  // Last-resort database lookup keeps existing sessions usable if a transient
-  // Better Auth adapter error occurs, but it is no longer the primary path.
   const token = getSessionToken(req);
   if (token && pool) return findUserFromDatabaseToken(token);
-
   return null;
 }
 

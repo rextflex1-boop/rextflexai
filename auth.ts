@@ -1,5 +1,9 @@
+import dns from 'node:dns';
 import dotenv from 'dotenv';
 dotenv.config();
+// Railway's network can expose both IPv6 and IPv4 records for Neon. Prefer IPv4
+// so pg does not spend the connection timeout on an unreachable IPv6 route.
+dns.setDefaultResultOrder('ipv4first');
 import { Pool } from 'pg';
 import { betterAuth } from 'better-auth';
 import { bearer } from 'better-auth/plugins';
@@ -23,10 +27,22 @@ function normalizeDatabaseUrl(raw: string | undefined) {
 
 const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
-let dbPool: Pool | undefined = undefined;
+export let dbPool: Pool | undefined = undefined;
 if (databaseUrl) {
   try {
-    dbPool = new Pool({ connectionString: databaseUrl });
+    dbPool = new Pool({
+      connectionString: databaseUrl,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 15000,
+      maxLifetimeSeconds: 300,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+      enableChannelBinding: true,
+    });
+    dbPool.on('error', (error) => {
+      console.warn('[AI Studio] PostgreSQL pool idle-client error:', error?.message || error);
+    });
   } catch (err) {
     console.warn('[AI Studio] Could not initialize database pool, using in-memory auth store:', err);
   }
