@@ -69,3 +69,17 @@ create table if not exists user_settings (
   model_tier text not null default 'titan',
   updated_at timestamptz not null default now()
 );
+
+-- RextFlex Ai v5 workspace files
+create table if not exists workspace_files (
+  id text primary key,
+  user_id text not null references "user"(id) on delete cascade,
+  session_id text not null references chat_sessions(id) on delete cascade,
+  path text not null,
+  mime text not null default 'application/octet-stream',
+  size integer not null default 0,
+  content bytea not null,
+  updated_at timestamptz not null default now(),
+  unique(user_id, session_id, path)
+);
+create index if not exists workspace_files_session_idx on workspace_files(user_id, session_id);

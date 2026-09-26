@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+import { spawn } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { Pool } from 'pg';
@@ -130,6 +132,17 @@ async function ensureDatabaseSchema() {
       model_tier text not null default 'titan',
       updated_at timestamptz not null default now()
     );
+    create table if not exists workspace_files (
+      id text primary key,
+      user_id text not null references "user"(id) on delete cascade,
+      session_id text not null references chat_sessions(id) on delete cascade,
+      path text not null,
+      mime text not null default 'application/octet-stream',
+      size integer not null default 0,
+      content bytea not null,
+      updated_at timestamptz not null default now(),
+      unique(user_id, session_id, path)
+    );
     create index if not exists chat_sessions_user_id_idx on chat_sessions(user_id);
     create index if not exists chat_messages_session_id_idx on chat_messages(session_id);
   `);
@@ -191,6 +204,209 @@ type ModelTier = keyof typeof MODEL_TIERS;
 
 function id(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+
+const WORKSPACE_ROOT = path.join(process.cwd(), 'data', 'workspaces');
+const MAX_WORKSPACE_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+function safeWorkspacePath(relativePath: string) {
+  const normalized = String(relativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('..')) throw new Error('Invalid workspace path.');
+  const cleaned = normalized.split('/').filter((segment) => segment && segment !== '.').join('/');
+  if (!cleaned || cleaned.length > 240) throw new Error('Invalid workspace path.');
+  return cleaned;
+}
+
+function workspaceDir(userId: string, sessionId: string) {
+  const safeUser = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+  const safeSession = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+  return path.join(WORKSPACE_ROOT, safeUser, safeSession);
+}
+
+async function ensureWorkspace(userId: string, sessionId: string) {
+  const dir = workspaceDir(userId, sessionId);
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
+}
+
+async function persistWorkspaceFile(userId: string, sessionId: string, relativePath: string, buffer: Buffer, mime = 'application/octet-stream') {
+  const safePath = safeWorkspacePath(relativePath);
+  if (buffer.byteLength > MAX_WORKSPACE_FILE_BYTES) throw new Error(`File exceeds ${MAX_WORKSPACE_FILE_BYTES / 1024 / 1024}MB limit.`);
+  const dir = await ensureWorkspace(userId, sessionId);
+  const abs = path.join(dir, safePath);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, buffer);
+  if (pool) {
+    try {
+      await pool.query(
+        `insert into workspace_files (id,user_id,session_id,path,mime,size,content,updated_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
+         on conflict (user_id,session_id,path)
+         do update set mime=excluded.mime,size=excluded.size,content=excluded.content,updated_at=excluded.updated_at`,
+        [id('file'), userId, sessionId, safePath, mime || 'application/octet-stream', buffer.byteLength, buffer, new Date()],
+      );
+    } catch (err) {
+      console.warn('[AI Studio] DB workspace file persist failed:', err);
+    }
+  }
+  return { path: safePath, mime, size: buffer.byteLength };
+}
+
+async function readWorkspaceBuffer(userId: string, sessionId: string, relativePath: string) {
+  const safePath = safeWorkspacePath(relativePath);
+  const dir = await ensureWorkspace(userId, sessionId);
+  const abs = path.join(dir, safePath);
+  try {
+    return { path: safePath, buffer: await fs.readFile(abs) };
+  } catch {
+    if (pool) {
+      const result = await pool.query('select path,mime,content from workspace_files where user_id=$1 and session_id=$2 and path=$3 limit 1', [userId, sessionId, safePath]);
+      const row = result.rows[0];
+      if (row?.content) {
+        const buffer = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        await fs.writeFile(abs, buffer);
+        return { path: safePath, buffer, mime: row.mime };
+      }
+    }
+    return null;
+  }
+}
+
+async function listWorkspaceFiles(userId: string, sessionId: string) {
+  if (pool) {
+    try {
+      const result = await pool.query('select path,mime,size,updated_at from workspace_files where user_id=$1 and session_id=$2 order by path asc', [userId, sessionId]);
+      if (result.rows.length) return result.rows;
+    } catch (err) {
+      console.warn('[AI Studio] DB workspace file list failed:', err);
+    }
+  }
+  const dir = await ensureWorkspace(userId, sessionId);
+  const results: Array<{ path: string; mime: string; size: number; updated_at: string }> = [];
+  async function walk(current: string, prefix = '') {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const child = path.join(current, entry.name);
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(child, rel);
+      else {
+        const stat = await fs.stat(child);
+        results.push({ path: rel, mime: 'application/octet-stream', size: stat.size, updated_at: stat.mtime.toISOString() });
+      }
+    }
+  }
+  await walk(dir);
+  return results;
+}
+
+async function deleteWorkspaceFile(userId: string, sessionId: string, relativePath: string) {
+  const safePath = safeWorkspacePath(relativePath);
+  const dir = await ensureWorkspace(userId, sessionId);
+  const abs = path.join(dir, safePath);
+  try { await fs.unlink(abs); } catch {}
+  if (pool) {
+    await pool.query('delete from workspace_files where user_id=$1 and session_id=$2 and path=$3', [userId, sessionId, safePath]).catch(() => {});
+  }
+}
+
+function parseAllowedCommand(command: string) {
+  const raw = String(command || '').trim();
+  if (!raw) throw new Error('Command is required.');
+  if (raw.length > 240) throw new Error('Command is too long.');
+  const allowedExact = /^(pwd|ls|ls -la|node --version|node -v|npm --version|npm -v|python --version|git status --short)$/;
+  if (allowedExact.test(raw)) return { kind: 'direct' as const, executable: raw.split(/\s+/)[0], args: raw.split(/\s+/).slice(1) };
+  if (/^find \. -maxdepth 2 -type f$/.test(raw)) return { kind: 'find' as const };
+  const cat = raw.match(/^cat\s+(.+)$/);
+  if (cat) return { kind: 'cat' as const, target: safeWorkspacePath(cat[1]) };
+  if (raw === 'npm install --ignore-scripts') return { kind: 'exec' as const, executable: 'npm', args: ['install', '--ignore-scripts'] };
+  if (raw === 'npm run build') return { kind: 'exec' as const, executable: 'npm', args: ['run', 'build'] };
+  if (raw === 'npm test') return { kind: 'exec' as const, executable: 'npm', args: ['test'] };
+  throw new Error('Command not allowed. Supported: pwd, ls, find . -maxdepth 2 -type f, cat <file>, node -v, npm -v, npm install --ignore-scripts, npm run build, npm test, git status --short.');
+}
+
+async function executeWorkspaceCommand(userId: string, sessionId: string, command: string) {
+  const parsed = parseAllowedCommand(command);
+  const cwd = await ensureWorkspace(userId, sessionId);
+  if (parsed.kind === 'cat') {
+    const item = await readWorkspaceBuffer(userId, sessionId, parsed.target!);
+    if (!item) throw new Error(`File not found: ${parsed.target}`);
+    return { command, code: 0, stdout: item.buffer.toString('utf8').slice(0, 20000), stderr: '' };
+  }
+  if (parsed.kind === 'find') {
+    const files = await listWorkspaceFiles(userId, sessionId);
+    return { command, code: 0, stdout: files.map((f) => f.path).join('\n'), stderr: '' };
+  }
+  return await new Promise<{ command: string; code: number; stdout: string; stderr: string }>((resolve) => {
+    const child = spawn(parsed.executable!, parsed.args || [], { cwd, env: { ...process.env, FORCE_COLOR: '0' }, shell: false });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => child.kill('SIGKILL'), 30000);
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); if (stdout.length > 20000) stdout = stdout.slice(-20000); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); if (stderr.length > 20000) stderr = stderr.slice(-20000); });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ command, code: code ?? -1, stdout, stderr }); });
+    child.on('error', (error) => { clearTimeout(timer); resolve({ command, code: -1, stdout, stderr: error.message }); });
+  });
+}
+
+function extractJsonObject(raw: string) {
+  const cleaned = String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('Agent returned invalid JSON.');
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+async function searchWeb(query: string) {
+  const q = String(query || '').trim();
+  if (!q) throw new Error('Search query is required.');
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+  const response = await fetch(url, { headers: { 'User-Agent': 'RextFlexAi/1.0 research bot' } });
+  if (!response.ok) throw new Error(`Search provider returned ${response.status}.`);
+  const html = await response.text();
+  const results: Array<{ title: string; url: string; snippet: string }> = [];
+  const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html)) && results.length < 8) {
+    const clean = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+    let resultUrl = match[1];
+    try {
+      if (resultUrl.startsWith('//duckduckgo.com/l/?')) {
+        const redirected = new URL(`https:${resultUrl}`);
+        resultUrl = redirected.searchParams.get('uddg') || resultUrl;
+      }
+      resultUrl = decodeURIComponent(resultUrl);
+    } catch {}
+    results.push({ title: clean(match[2]), url: resultUrl, snippet: clean(match[3]) });
+  }
+  return results;
+}
+
+async function analyzeUploadedFile(buffer: Buffer, mime: string, name: string, question: string) {
+  const prompt = `Analyze the uploaded file named ${name}. Answer the user's request: ${question || 'Summarize the file, explain key points, and identify useful next steps.'}\nBe accurate about what is and is not present in the file.`;
+  if (process.env.GEMINI_API_KEY) {
+    const contents = [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType: mime || 'application/octet-stream', data: buffer.toString('base64') } },
+      ],
+    }];
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { temperature: 0.2, maxOutputTokens: 6000 } }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || `Gemini file analysis failed (${response.status})`);
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No analysis returned.';
+  }
+  if (/^(text\/|application\/json|application\/javascript|application\/typescript|application\/xml|image\/svg\+xml)/i.test(mime || '') || /\.(txt|md|json|csv|js|ts|tsx|jsx|html|css|xml|sql|py|java|kt|tsx)$/i.test(name)) {
+    const text = buffer.toString('utf8').slice(0, 50000);
+    return `File: ${name}\nSize: ${buffer.byteLength} bytes\n\nContent preview:\n${text}`;
+  }
+  return `File uploaded: ${name} (${mime || 'unknown'}, ${buffer.byteLength} bytes). Set GEMINI_API_KEY to enable binary/PDF/image AI analysis.`;
 }
 
 function getBearerToken(req: express.Request): string | null {
@@ -871,6 +1087,197 @@ async function main() {
     } catch (error: any) {
       console.error('DELETE /api/sessions/:sessionId', error);
       res.status(500).json({ error: error?.message || 'Failed to delete project' });
+    }
+  });
+
+
+  app.get('/api/workspace/files', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.query.sessionId || '');
+      if (!sessionId) return res.status(400).json({ error: 'sessionId is required.' });
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      res.json({ files: await listWorkspaceFiles(user.id, sessionId) });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'Failed to list workspace files' });
+    }
+  });
+
+  app.get('/api/workspace/file', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.query.sessionId || '');
+      const filePath = String(req.query.path || '');
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      const file = await readWorkspaceBuffer(user.id, sessionId, filePath);
+      if (!file) return res.status(404).json({ error: 'File not found.' });
+      const mime = file.mime || 'text/plain';
+      if (mime.startsWith('text/') || /\.(html?|css|js|jsx|ts|tsx|json|md|txt|csv|xml|svg|sql|py|java|kt)$/i.test(file.path)) {
+        return res.json({ path: file.path, text: file.buffer.toString('utf8') });
+      }
+      res.setHeader('Content-Type', mime);
+      res.send(file.buffer);
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || 'Failed to read workspace file' });
+    }
+  });
+
+  app.post('/api/workspace/file', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const filePath = String(req.body?.path || '');
+      const content = String(req.body?.content || '');
+      const mime = String(req.body?.mime || 'text/plain');
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      const result = await persistWorkspaceFile(user.id, sessionId, filePath, Buffer.from(content, 'utf8'), mime);
+      res.json({ file: result });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || 'Failed to save workspace file' });
+    }
+  });
+
+  app.post('/api/workspace/upload', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const name = String(req.body?.name || 'upload.bin');
+      const mime = String(req.body?.mime || 'application/octet-stream');
+      const base64 = String(req.body?.dataBase64 || '').replace(/^data:[^;]+;base64,/, '');
+      if (!sessionId || !base64) return res.status(400).json({ error: 'sessionId and dataBase64 are required.' });
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      const buffer = Buffer.from(base64, 'base64');
+      if (buffer.byteLength > MAX_UPLOAD_BYTES) return res.status(413).json({ error: 'Upload exceeds 8MB limit.' });
+      const safeName = safeWorkspacePath(name.replace(/^.*[\\/]/, ''));
+      const result = await persistWorkspaceFile(user.id, sessionId, `uploads/${safeName}`, buffer, mime);
+      res.json({ file: result });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || 'Failed to upload file' });
+    }
+  });
+
+  app.delete('/api/workspace/file', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const filePath = String(req.body?.path || '');
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      await deleteWorkspaceFile(user.id, sessionId, filePath);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || 'Failed to delete workspace file' });
+    }
+  });
+
+  app.post('/api/workspace/command', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const command = String(req.body?.command || '');
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      const result = await executeWorkspaceCommand(user.id, sessionId, command);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || 'Command failed' });
+    }
+  });
+
+  app.post('/api/workspace/analyze-file', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const filePath = String(req.body?.path || '');
+      const question = String(req.body?.question || '');
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      const file = await readWorkspaceBuffer(user.id, sessionId, filePath);
+      if (!file) return res.status(404).json({ error: 'File not found.' });
+      const mime = file.mime || 'application/octet-stream';
+      const analysis = await analyzeUploadedFile(file.buffer, mime, file.path, question);
+      res.json({ analysis });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'File analysis failed' });
+    }
+  });
+
+  app.post('/api/research', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const query = String(req.body?.query || '').trim();
+      const deep = Boolean(req.body?.deepResearch);
+      if (!query) return res.status(400).json({ error: 'Query is required.' });
+      const results = await searchWeb(query);
+      if (!deep) return res.json({ query, results });
+      const researchPrompt = `You are RextFlex Ai Deep Research. Based only on the web results below, write a concise but useful research brief for the user's query. Cite sources inline as [1], [2] etc and include a Sources section with each URL. Clearly separate facts from uncertainty.\n\nUSER QUERY: ${query}\n\nRESULTS:\n${results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')}`;
+      let summary = '';
+      if (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY || process.env.POLLINATIONS_API_KEY) {
+        summary = await callProvider('titan', [{ role: 'user', content: researchPrompt }], 'You produce neutral web research summaries with citations. Do not invent facts or sources.');
+      } else {
+        summary = results.map((r, i) => `[${i+1}] ${r.title}\n${r.snippet}\n${r.url}`).join('\n\n');
+      }
+      res.json({ query, results, summary, deepResearch: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'Research failed' });
+    }
+  });
+
+  app.post('/api/agent/run', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const prompt = String(req.body?.prompt || '').trim();
+      const requestedTier = String(req.body?.modelTier || '') as ModelTier;
+      const tier = requestedTier in MODEL_TIERS ? requestedTier : await getUserModelTier(user.id);
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      if (!prompt) return res.status(400).json({ error: 'Agent prompt is required.' });
+      const fileSummary = (await listWorkspaceFiles(user.id, sessionId)).map((f: any) => `${f.path} (${f.size} bytes)`).slice(0, 100).join('\n');
+      const agentSystem = `You are the RextFlex Ai autonomous software agent. Return ONLY valid JSON with this shape:
+{"message":"friendly progress summary","actions":[{"type":"write_file","path":"index.html","content":"..."},{"type":"delete_file","path":"..."},{"type":"run_command","command":"npm run build"}],"previewHtml":"optional complete HTML string"}
+Rules: paths must be relative; never use ..; keep each file under 200KB; prefer a complete static web project (index.html, styles.css, app.js) unless user explicitly requests another stack; do not invent unavailable secrets; only use allowed commands: npm install --ignore-scripts, npm run build, npm test, pwd, ls, find . -maxdepth 2 -type f, cat <file>, node -v, npm -v, python --version, git status --short. If user asks for a website/app, make real files rather than dumping code only. Use existing files when editing. Current workspace files:\n${fileSummary || '(empty)'}`;
+      const raw = await callProvider(tier, [{ role: 'user', content: prompt }], agentSystem);
+      const plan = extractJsonObject(raw);
+      const actions = Array.isArray(plan.actions) ? plan.actions.slice(0, 40) : [];
+      const events: any[] = [];
+      let previewHtml = typeof plan.previewHtml === 'string' ? plan.previewHtml : '';
+      let totalBytes = 0;
+      for (const action of actions) {
+        if (action.type === 'write_file') {
+          const content = String(action.content || '');
+          totalBytes += Buffer.byteLength(content, 'utf8');
+          if (totalBytes > 4 * 1024 * 1024) throw new Error('Agent file output exceeded 4MB limit.');
+          const saved = await persistWorkspaceFile(user.id, sessionId, String(action.path || ''), Buffer.from(content, 'utf8'), 'text/plain');
+          events.push({ type: 'write_file', path: saved.path, size: saved.size });
+          if (!previewHtml && saved.path.toLowerCase() === 'index.html') previewHtml = content;
+        } else if (action.type === 'delete_file') {
+          const filePath = safeWorkspacePath(String(action.path || ''));
+          await deleteWorkspaceFile(user.id, sessionId, filePath);
+          events.push({ type: 'delete_file', path: filePath });
+        } else if (action.type === 'run_command') {
+          const commandResult = await executeWorkspaceCommand(user.id, sessionId, String(action.command || ''));
+          events.push({ type: 'run_command', ...commandResult });
+          if (commandResult.code !== 0) break;
+        }
+      }
+      res.json({ message: String(plan.message || 'Agent task completed.'), events, previewHtml, modelTier: tier });
+    } catch (error: any) {
+      console.error('POST /api/agent/run', error);
+      res.status(500).json({ error: error?.message || 'Agent failed' });
     }
   });
 

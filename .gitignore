@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime workspace cache (DB remains the persistent source when configured)
+data/workspaces/

@@ -31,3 +31,10 @@ Set the callback URL in Google Cloud Console to:
 `<BETTER_AUTH_URL>/api/auth/callback/google`
 
 The app no longer uses demo/fake login responses or fake local-storage identities.
+
+
+## RextFlex Ai v5 workspace
+
+The project now includes Agent, Files, Terminal, Web Research and Preview modes. See `FEATURES_V5.md` for the first-five feature set and safety limits.
+
+For AI analysis of PDFs/images/binary uploads, configure `GEMINI_API_KEY`. Web research works without a separate search key; deep research uses the configured AI provider for synthesis.

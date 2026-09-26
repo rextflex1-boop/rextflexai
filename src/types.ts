@@ -6,7 +6,7 @@ export interface ChatMessage {
   generatedWebsiteHtml?: string;
 }
 
-export type TabMode = 'chat' | 'build';
+export type TabMode = 'chat' | 'agent' | 'files' | 'terminal' | 'research' | 'preview';
 
 export interface AIModel {
   id: string;
