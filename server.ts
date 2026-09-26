@@ -444,6 +444,33 @@ async function executeWorkspaceCommand(userId: string, sessionId: string, comman
   });
 }
 
+function normalizeLooseJson(source: string) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (inString) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === '\\') { out += ch; escaped = true; continue; }
+      if (ch === '"') { out += ch; inString = false; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) { out += `\\u${code.toString(16).padStart(4, '0')}`; continue; }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    out += ch;
+  }
+  return out
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1');
+}
+
 function extractJsonObject(raw: string) {
   const source = String(raw || '').replace(/^\uFEFF/, '').trim();
   if (!source) throw new Error('Agent returned empty output.');
@@ -477,7 +504,10 @@ function extractJsonObject(raw: string) {
           depth -= 1;
           if (depth === 0) {
             const fragment = candidate.slice(start, i + 1);
-            try { return JSON.parse(fragment); } catch { break; }
+            for (const parsedSource of [fragment, normalizeLooseJson(fragment)]) {
+              try { return JSON.parse(parsedSource); } catch {}
+            }
+            break;
           }
         }
       }
@@ -509,7 +539,14 @@ async function getAgentPlan(raw: string, tier: ModelTier, userPrompt: string) {
     const repairSystem = `You are a JSON repair formatter. Return ONLY one valid JSON object, with NO markdown, NO code fences, NO explanation, and NO comments. The object must use exactly this shape: {"message":"string","actions":[{"type":"write_file","path":"relative/path","content":"file text"},{"type":"delete_file","path":"relative/path"},{"type":"run_command","command":"allowed command"}],"previewHtml":"optional html"}. Preserve the user's intent. Never invent secrets. Only use the allowed commands already provided to the agent. Fix escaping, quotes, and newlines so the result is valid JSON.`;
     const repairPrompt = `Original user request:\n${userPrompt.slice(0, 8000)}\n\nPrevious agent output that was not valid JSON:\n${String(raw || '').slice(0, 16000)}`;
     const repaired = await callProvider(tier, [{ role: 'user', content: repairPrompt }], repairSystem, { jsonMode: true });
-    return extractJsonObject(repaired);
+    try {
+      return extractJsonObject(repaired);
+    } catch (repairError) {
+      console.warn('[AI Studio] Strict JSON repair still failed; using a minimal agent salvage pass.', repairError);
+      const salvageSystem = `You are RextFlex Ai Apex. Return ONLY a JSON object. Do not use markdown or explanations. Use this exact minimal shape: {"message":"string","actions":[]}. If you need to create a file, add {"type":"write_file","path":"relative/path","content":"file content"}. If no safe action can be recovered, return an empty actions array.`;
+      const salvage = await callProvider(tier, [{ role: 'user', content: `Recover the task from this original request and failed output. Original request:\n${userPrompt.slice(0, 6000)}\n\nFailed output:\n${String(raw || '').slice(0, 10000)}` }], salvageSystem, { jsonMode: true });
+      return extractJsonObject(salvage);
+    }
   }
 }
 
@@ -906,14 +943,15 @@ async function callProvider(tier: ModelTier, messages: any[], systemPrompt: stri
       const body: any = {
         model: info.modelId,
         messages: [{ role: 'system', content: systemPrompt }, ...messages],
-        temperature: 0.5,
+        temperature: options.jsonMode ? 0.15 : 0.5,
         max_tokens: 8192,
       };
       if (info.supportsReasoning) body.reasoning_effort = 'low';
-      // Groq supports OpenAI-compatible JSON mode; use it for agent planning
-      // so the model is constrained to machine-readable output. Other providers
-      // still use the robust parser + repair pass below.
-      if (options.jsonMode && info.provider === 'groq') {
+      // Pollinations is OpenAI-compatible and currently supports structured
+      // outputs on its /v1/chat/completions endpoint. Apply JSON mode to Apex
+      // as well as Groq so the agent does not have to "manually" follow the
+      // JSON contract in free-form text.
+      if (options.jsonMode && (info.provider === 'groq' || info.provider === 'pollinations')) {
         body.response_format = { type: 'json_object' };
       }
 
@@ -1523,7 +1561,7 @@ async function main() {
 
       await insertChatMessage(id('msg'), sessionId, 'user', { role: 'user', text: prompt, timestamp: new Date().toISOString(), agentMode: true });
       const fileSummary = (await listWorkspaceFiles(user.id, sessionId)).map((f: any) => `${f.path} (${f.size} bytes)`).slice(0, 100).join('\n');
-      const agentSystem = `You are the RextFlex Ai autonomous software agent running as Apex inside an isolated E2B sandbox. Return ONLY valid JSON with this shape:\n{"message":"friendly progress summary","actions":[{"type":"write_file","path":"index.html","content":"..."},{"type":"delete_file","path":"..."},{"type":"run_command","command":"npm run build"}],"previewHtml":"optional complete HTML string"}\nRules: paths must be relative; never use ..; keep each file under 2MB; prefer real React/Vite projects when the user asks for React, otherwise create the requested stack; NEVER dump the whole code into message, the files belong in the sandbox; only use allowed commands: npm install --ignore-scripts, npm install, npm run build, npm test, pwd, ls, find . -maxdepth 3 -type f, cat <file>, node -v, npm -v, python --version, git status --short. Use the existing workspace files when editing. Current workspace files:\n${fileSummary || '(empty)'}`;
+      const agentSystem = `You are the RextFlex Ai autonomous software agent running as Apex inside an isolated E2B sandbox. Return ONLY one valid JSON object. Do NOT output markdown, code fences, prose before/after JSON, comments, single-quoted strings, or literal line breaks inside JSON string values. Use JSON escape sequences such as \\n inside string values. Use this exact shape:\n{"message":"friendly progress summary","actions":[{"type":"write_file","path":"index.html","content":"..."},{"type":"delete_file","path":"..."},{"type":"run_command","command":"npm run build"}],"previewHtml":"optional complete HTML string"}\nRules: paths must be relative; never use ..; keep each file under 2MB; prefer real React/Vite projects when the user asks for React, otherwise create the requested stack; NEVER dump the whole code into message, the files belong in the sandbox; only use allowed commands: npm install --ignore-scripts, npm install, npm run build, npm test, pwd, ls, find . -maxdepth 3 -type f, cat <file>, node -v, npm -v, python --version, git status --short. Use the existing workspace files when editing. Current workspace files:\n${fileSummary || '(empty)'}`;
       const raw = await callProvider(tier, [{ role: 'user', content: prompt }], agentSystem, { jsonMode: true });
       const plan = await getAgentPlan(raw, tier, prompt);
       const actions = Array.isArray(plan.actions) ? plan.actions.slice(0, 50) : [];
