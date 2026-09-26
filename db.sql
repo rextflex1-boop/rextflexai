@@ -83,3 +83,16 @@ create table if not exists workspace_files (
   unique(user_id, session_id, path)
 );
 create index if not exists workspace_files_session_idx on workspace_files(user_id, session_id);
+
+
+-- E2B sandbox mapping for agent projects
+create table if not exists workspace_sandboxes (
+  user_id text not null references "user"(id) on delete cascade,
+  session_id text not null references chat_sessions(id) on delete cascade,
+  sandbox_id text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key(user_id, session_id),
+  unique(sandbox_id)
+);
+create index if not exists workspace_sandboxes_session_idx on workspace_sandboxes(user_id, session_id);

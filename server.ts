@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { Pool } from 'pg';
 import { auth } from './auth.js';
+import Sandbox from 'e2b';
 
 // Load Railway/local environment variables before auth/database are used.
 dotenv.config();
@@ -143,8 +144,18 @@ async function ensureDatabaseSchema() {
       updated_at timestamptz not null default now(),
       unique(user_id, session_id, path)
     );
+    create table if not exists workspace_sandboxes (
+      user_id text not null references "user"(id) on delete cascade,
+      session_id text not null references chat_sessions(id) on delete cascade,
+      sandbox_id text not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      primary key(user_id, session_id),
+      unique(sandbox_id)
+    );
     create index if not exists chat_sessions_user_id_idx on chat_sessions(user_id);
     create index if not exists chat_messages_session_id_idx on chat_messages(session_id);
+    create index if not exists workspace_sandboxes_session_idx on workspace_sandboxes(user_id, session_id);
   `);
 
   // Repair older installations that have the tables but are missing newer
@@ -193,6 +204,7 @@ interface MemoryMessage {
 const memoryUserSettings = new Map<string, string>();
 const memorySessions = new Map<string, MemorySession>();
 const memoryMessages: MemoryMessage[] = [];
+const memorySandboxIds = new Map<string, string>();
 
 const MODEL_TIERS = {
   silicon: { id: 'silicon', name: 'Silicon', provider: 'groq', modelId: 'openai/gpt-oss-20b', supportsReasoning: true },
@@ -312,6 +324,100 @@ async function deleteWorkspaceFile(userId: string, sessionId: string, relativePa
   }
 }
 
+
+async function getWorkspaceSandboxId(userId: string, sessionId: string) {
+  const key = `${userId}:${sessionId}`;
+  if (pool) {
+    try {
+      const result = await pool.query('select sandbox_id from workspace_sandboxes where user_id=$1 and session_id=$2 limit 1', [userId, sessionId]);
+      if (result.rows[0]?.sandbox_id) {
+        memorySandboxIds.set(key, result.rows[0].sandbox_id);
+        return String(result.rows[0].sandbox_id);
+      }
+    } catch (err) {
+      console.warn('[AI Studio] DB sandbox lookup failed:', err);
+    }
+  }
+  return memorySandboxIds.get(key) || null;
+}
+
+async function saveWorkspaceSandboxId(userId: string, sessionId: string, sandboxId: string) {
+  const key = `${userId}:${sessionId}`;
+  memorySandboxIds.set(key, sandboxId);
+  if (pool) {
+    try {
+      await pool.query(
+        `insert into workspace_sandboxes (user_id,session_id,sandbox_id) values ($1,$2,$3)
+         on conflict (user_id,session_id) do update set sandbox_id=excluded.sandbox_id,updated_at=now()`,
+        [userId, sessionId, sandboxId],
+      );
+    } catch (err) {
+      console.warn('[AI Studio] DB sandbox save failed:', err);
+    }
+  }
+}
+
+async function getOrCreateE2BSandbox(userId: string, sessionId: string) {
+  if (!process.env.E2B_API_KEY) return null;
+  const existingId = await getWorkspaceSandboxId(userId, sessionId);
+  if (existingId) {
+    try {
+      const sandbox = await Sandbox.connect(existingId);
+      return sandbox;
+    } catch (error: any) {
+      console.warn('[AI Studio] Stored E2B sandbox could not be reconnected; creating a new one:', error?.message || error);
+    }
+  }
+  const timeoutMs = Math.max(5 * 60_000, Number(process.env.E2B_SANDBOX_TIMEOUT_MS || 60 * 60_000));
+  const sandbox = await Sandbox.create('base', {
+    timeoutMs,
+    lifecycle: { onTimeout: 'pause', autoResume: true },
+    metadata: { app: 'rextflexai', userId: String(userId).slice(0, 120), sessionId: String(sessionId).slice(0, 120) },
+  });
+  await saveWorkspaceSandboxId(userId, sessionId, sandbox.sandboxId);
+  return sandbox;
+}
+
+async function writeToExecutionSandbox(sandbox: any, relativePath: string, content: string | Buffer) {
+  if (!sandbox) return;
+  const safePath = safeWorkspacePath(relativePath);
+  await sandbox.files.write(safePath, content);
+}
+
+async function runInExecutionSandbox(sandbox: any, command: string) {
+  if (!sandbox) throw new Error('E2B sandbox is not available.');
+  const result = await sandbox.commands.run(command, { timeoutMs: 120_000 });
+  return {
+    command,
+    code: Number(result.exitCode ?? result.code ?? (result.error ? 1 : 0)),
+    stdout: String(result.stdout || result.output || ''),
+    stderr: String(result.stderr || ''),
+  };
+}
+
+function isMeshyAssetUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && (parsed.hostname === 'meshy.ai' || parsed.hostname.endsWith('.meshy.ai'));
+  } catch {
+    return false;
+  }
+}
+
+async function meshyRequest(pathname: string, init: RequestInit = {}) {
+  const key = process.env.MESHY_API_KEY;
+  if (!key) throw Object.assign(new Error('MESHY_API_KEY is not configured.'), { code: 'MESHY_NOT_CONFIGURED' });
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${key}`);
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const response = await fetch(`https://api.meshy.ai${pathname}`, { ...init, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || `Meshy request failed (${response.status})`);
+  }
+  return data;
+}
+
 function parseAllowedCommand(command: string) {
   const raw = String(command || '').trim();
   if (!raw) throw new Error('Command is required.');
@@ -322,9 +428,10 @@ function parseAllowedCommand(command: string) {
   const cat = raw.match(/^cat\s+(.+)$/);
   if (cat) return { kind: 'cat' as const, target: safeWorkspacePath(cat[1]) };
   if (raw === 'npm install --ignore-scripts') return { kind: 'exec' as const, executable: 'npm', args: ['install', '--ignore-scripts'] };
+  if (raw === 'npm install') return { kind: 'exec' as const, executable: 'npm', args: ['install'] };
   if (raw === 'npm run build') return { kind: 'exec' as const, executable: 'npm', args: ['run', 'build'] };
   if (raw === 'npm test') return { kind: 'exec' as const, executable: 'npm', args: ['test'] };
-  throw new Error('Command not allowed. Supported: pwd, ls, find . -maxdepth 2 -type f, cat <file>, node -v, npm -v, npm install --ignore-scripts, npm run build, npm test, git status --short.');
+  throw new Error('Command not allowed. Supported: pwd, ls, find . -maxdepth 2 -type f, cat <file>, node -v, npm -v, npm install --ignore-scripts, npm install, npm run build, npm test, git status --short.');
 }
 
 async function executeWorkspaceCommand(userId: string, sessionId: string, command: string) {
@@ -352,11 +459,72 @@ async function executeWorkspaceCommand(userId: string, sessionId: string, comman
 }
 
 function extractJsonObject(raw: string) {
-  const cleaned = String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('Agent returned invalid JSON.');
-  return JSON.parse(cleaned.slice(start, end + 1));
+  const source = String(raw || '').replace(/^\uFEFF/, '').trim();
+  if (!source) throw new Error('Agent returned empty output.');
+
+  const candidates: string[] = [];
+  const fenced = source.match(/```(?:json|javascript|js)?\s*([\s\S]*?)```/gi) || [];
+  for (const block of fenced) {
+    const body = block.replace(/^```(?:json|javascript|js)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    if (body) candidates.push(body);
+  }
+  candidates.push(source);
+
+  // Find balanced JSON objects while respecting quoted strings and escapes.
+  for (const candidate of candidates) {
+    for (let start = 0; start < candidate.length; start += 1) {
+      if (candidate[start] !== '{') continue;
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      for (let i = start; i < candidate.length; i += 1) {
+        const ch = candidate[i];
+        if (inString) {
+          if (escaped) { escaped = false; continue; }
+          if (ch === '\\') { escaped = true; continue; }
+          if (ch === '"') inString = false;
+          continue;
+        }
+        if (ch === '"') { inString = true; continue; }
+        if (ch === '{') depth += 1;
+        else if (ch === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            const fragment = candidate.slice(start, i + 1);
+            try { return JSON.parse(fragment); } catch { break; }
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error('Agent returned invalid JSON.');
+}
+
+async function getAgentPlan(raw: string, tier: ModelTier, userPrompt: string) {
+  try {
+    return extractJsonObject(raw);
+  } catch (firstError) {
+    // Some coding models occasionally ignore the JSON contract and return a
+    // complete HTML document. For the website-builder use case, salvage that
+    // output into a real workspace file instead of failing the whole agent run.
+    try {
+      const htmlFallback = extractHtml(raw);
+      if (htmlFallback.html && /<html|<!doctype\s+html/i.test(htmlFallback.html)) {
+        return {
+          message: 'The model returned a direct HTML build; RextFlex saved it as index.html.',
+          actions: [{ type: 'write_file', path: 'index.html', content: htmlFallback.html }],
+          previewHtml: htmlFallback.html,
+        };
+      }
+    } catch {}
+
+    console.warn('[AI Studio] Agent JSON parse failed; requesting a strict JSON repair.', firstError);
+    const repairSystem = `You are a JSON repair formatter. Return ONLY one valid JSON object, with NO markdown, NO code fences, NO explanation, and NO comments. The object must use exactly this shape: {"message":"string","actions":[{"type":"write_file","path":"relative/path","content":"file text"},{"type":"delete_file","path":"relative/path"},{"type":"run_command","command":"allowed command"}],"previewHtml":"optional html"}. Preserve the user's intent. Never invent secrets. Only use the allowed commands already provided to the agent. Fix escaping, quotes, and newlines so the result is valid JSON.`;
+    const repairPrompt = `Original user request:\n${userPrompt.slice(0, 8000)}\n\nPrevious agent output that was not valid JSON:\n${String(raw || '').slice(0, 16000)}`;
+    const repaired = await callProvider(tier, [{ role: 'user', content: repairPrompt }], repairSystem, { jsonMode: true });
+    return extractJsonObject(repaired);
+  }
 }
 
 async function searchWeb(query: string) {
@@ -738,7 +906,7 @@ async function callGemini(messages: any[], systemPrompt: string): Promise<string
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-async function callProvider(tier: ModelTier, messages: any[], systemPrompt: string) {
+async function callProvider(tier: ModelTier, messages: any[], systemPrompt: string, options: { jsonMode?: boolean } = {}) {
   const info = MODEL_TIERS[tier];
   const isPollinations = info.provider === 'pollinations';
   const key = isPollinations ? process.env.POLLINATIONS_API_KEY : process.env.GROQ_API_KEY;
@@ -753,6 +921,12 @@ async function callProvider(tier: ModelTier, messages: any[], systemPrompt: stri
         max_tokens: 8192,
       };
       if (info.supportsReasoning) body.reasoning_effort = 'low';
+      // Groq supports OpenAI-compatible JSON mode; use it for agent planning
+      // so the model is constrained to machine-readable output. Other providers
+      // still use the robust parser + repair pass below.
+      if (options.jsonMode && info.provider === 'groq') {
+        body.response_format = { type: 'json_object' };
+      }
 
       const response = await fetch(url, {
         method: 'POST',
@@ -1235,49 +1409,217 @@ async function main() {
     }
   });
 
+  app.post('/api/3d/image-to-3d', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const imageUrl = String(req.body?.imageUrl || '').trim();
+      if (!/^data:image\/(png|jpe?g);base64,/i.test(imageUrl) && !/^https:\/\//i.test(imageUrl)) {
+        return res.status(400).json({ error: 'Please provide a PNG/JPEG data URL or HTTPS image URL.' });
+      }
+      const result = await meshyRequest('/openapi/v1/image-to-3d', {
+        method: 'POST',
+        body: JSON.stringify({
+          image_url: imageUrl,
+          ai_model: 'latest',
+          texture_resolution: '2k',
+          enable_pbr: true,
+          should_remesh: true,
+          target_formats: ['glb'],
+        }),
+      });
+      res.json({ taskId: result.result, provider: 'meshy', type: 'image-to-3d' });
+    } catch (error: any) {
+      const status = error?.code === 'MESHY_NOT_CONFIGURED' ? 503 : 500;
+      res.status(status).json({ error: error?.message || 'Image to 3D failed.', code: error?.code || 'THREE_D_FAILED' });
+    }
+  });
+
+  app.post('/api/3d/text-to-3d', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const prompt = String(req.body?.prompt || '').trim().slice(0, 1200);
+      if (!prompt) return res.status(400).json({ error: 'A 3D prompt is required.' });
+      const result = await meshyRequest('/openapi/v2/text-to-3d', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'preview',
+          prompt,
+          ai_model: 'latest',
+          model_type: 'standard',
+          target_formats: ['glb'],
+        }),
+      });
+      res.json({ taskId: result.result, provider: 'meshy', type: 'text-to-3d-preview' });
+    } catch (error: any) {
+      const status = error?.code === 'MESHY_NOT_CONFIGURED' ? 503 : 500;
+      res.status(status).json({ error: error?.message || 'Text to 3D failed.', code: error?.code || 'THREE_D_FAILED' });
+    }
+  });
+
+  app.post('/api/3d/text-to-3d/refine', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const previewTaskId = String(req.body?.previewTaskId || '').trim();
+      const texturePrompt = String(req.body?.texturePrompt || '').trim().slice(0, 800);
+      if (!previewTaskId) return res.status(400).json({ error: 'previewTaskId is required.' });
+      const body: any = { mode: 'refine', preview_task_id: previewTaskId, target_formats: ['glb'], auto_size: true, enable_pbr: true };
+      if (texturePrompt) body.texture_prompt = texturePrompt;
+      const result = await meshyRequest('/openapi/v2/text-to-3d', { method: 'POST', body: JSON.stringify(body) });
+      res.json({ taskId: result.result, provider: 'meshy', type: 'text-to-3d-refine' });
+    } catch (error: any) {
+      const status = error?.code === 'MESHY_NOT_CONFIGURED' ? 503 : 500;
+      res.status(status).json({ error: error?.message || '3D refine failed.', code: error?.code || 'THREE_D_FAILED' });
+    }
+  });
+
+  app.get('/api/3d/task', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const taskId = String(req.query.id || '').trim();
+      const type = String(req.query.type || 'image-to-3d');
+      if (!taskId) return res.status(400).json({ error: 'Task id is required.' });
+      const pathname = type.startsWith('text-to-3d') ? `/openapi/v2/text-to-3d/${encodeURIComponent(taskId)}` : `/openapi/v1/image-to-3d/${encodeURIComponent(taskId)}`;
+      const task = await meshyRequest(pathname);
+      res.json({ task });
+    } catch (error: any) {
+      const status = error?.code === 'MESHY_NOT_CONFIGURED' ? 503 : 500;
+      res.status(status).json({ error: error?.message || 'Unable to read 3D task.', code: error?.code || 'THREE_D_FAILED' });
+    }
+  });
+
+  app.post('/api/3d/import-to-project', async (req, res) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const sessionId = String(req.body?.sessionId || '');
+      const modelUrl = String(req.body?.modelUrl || '').trim();
+      const targetPath = safeWorkspacePath(String(req.body?.path || 'models/generated.glb'));
+      const session = await getChatSession(sessionId, user.id);
+      if (!session) return res.status(404).json({ error: 'Project not found.' });
+      if (!isMeshyAssetUrl(modelUrl)) return res.status(400).json({ error: 'Only official Meshy asset URLs can be imported.' });
+      const response = await fetch(modelUrl);
+      if (!response.ok) throw new Error(`Unable to download generated model (${response.status}).`);
+      const contentType = response.headers.get('content-type') || 'model/gltf-binary';
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.byteLength > 20 * 1024 * 1024) throw new Error('3D model exceeds the 20MB project import limit.');
+      const saved = await persistWorkspaceFile(user.id, sessionId, targetPath, buffer, contentType);
+      if (process.env.E2B_API_KEY) {
+        try {
+          const sandbox = await getOrCreateE2BSandbox(user.id, sessionId);
+          await sandbox?.files.write(targetPath, buffer);
+        } catch (sandboxError: any) {
+          console.warn('[AI Studio] E2B 3D import sync failed:', sandboxError?.message || sandboxError);
+        }
+      }
+      res.json({ file: saved });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'Failed to import 3D asset.' });
+    }
+  });
+
   app.post('/api/agent/run', async (req, res) => {
     try {
       const user = await getSessionUser(req);
       if (!user) return res.status(401).json({ error: 'Unauthorized' });
       const sessionId = String(req.body?.sessionId || '');
       const prompt = String(req.body?.prompt || '').trim();
-      const requestedTier = String(req.body?.modelTier || '') as ModelTier;
-      const tier = requestedTier in MODEL_TIERS ? requestedTier : await getUserModelTier(user.id);
+      const tier: ModelTier = 'apex';
       const session = await getChatSession(sessionId, user.id);
       if (!session) return res.status(404).json({ error: 'Project not found.' });
       if (!prompt) return res.status(400).json({ error: 'Agent prompt is required.' });
+
+      await insertChatMessage(id('msg'), sessionId, 'user', { role: 'user', text: prompt, timestamp: new Date().toISOString(), agentMode: true });
       const fileSummary = (await listWorkspaceFiles(user.id, sessionId)).map((f: any) => `${f.path} (${f.size} bytes)`).slice(0, 100).join('\n');
-      const agentSystem = `You are the RextFlex Ai autonomous software agent. Return ONLY valid JSON with this shape:
-{"message":"friendly progress summary","actions":[{"type":"write_file","path":"index.html","content":"..."},{"type":"delete_file","path":"..."},{"type":"run_command","command":"npm run build"}],"previewHtml":"optional complete HTML string"}
-Rules: paths must be relative; never use ..; keep each file under 200KB; prefer a complete static web project (index.html, styles.css, app.js) unless user explicitly requests another stack; do not invent unavailable secrets; only use allowed commands: npm install --ignore-scripts, npm run build, npm test, pwd, ls, find . -maxdepth 2 -type f, cat <file>, node -v, npm -v, python --version, git status --short. If user asks for a website/app, make real files rather than dumping code only. Use existing files when editing. Current workspace files:\n${fileSummary || '(empty)'}`;
-      const raw = await callProvider(tier, [{ role: 'user', content: prompt }], agentSystem);
-      const plan = extractJsonObject(raw);
-      const actions = Array.isArray(plan.actions) ? plan.actions.slice(0, 40) : [];
+      const agentSystem = `You are the RextFlex Ai autonomous software agent running as Apex inside an isolated E2B sandbox. Return ONLY valid JSON with this shape:\n{"message":"friendly progress summary","actions":[{"type":"write_file","path":"index.html","content":"..."},{"type":"delete_file","path":"..."},{"type":"run_command","command":"npm run build"}],"previewHtml":"optional complete HTML string"}\nRules: paths must be relative; never use ..; keep each file under 2MB; prefer real React/Vite projects when the user asks for React, otherwise create the requested stack; NEVER dump the whole code into message, the files belong in the sandbox; only use allowed commands: npm install --ignore-scripts, npm install, npm run build, npm test, pwd, ls, find . -maxdepth 3 -type f, cat <file>, node -v, npm -v, python --version, git status --short. Use the existing workspace files when editing. Current workspace files:\n${fileSummary || '(empty)'}`;
+      const raw = await callProvider(tier, [{ role: 'user', content: prompt }], agentSystem, { jsonMode: true });
+      const plan = await getAgentPlan(raw, tier, prompt);
+      const actions = Array.isArray(plan.actions) ? plan.actions.slice(0, 50) : [];
       const events: any[] = [];
       let previewHtml = typeof plan.previewHtml === 'string' ? plan.previewHtml : '';
       let totalBytes = 0;
+      const sandbox = await getOrCreateE2BSandbox(user.id, sessionId);
+      let executionError: any = null;
       for (const action of actions) {
-        if (action.type === 'write_file') {
-          const content = String(action.content || '');
-          totalBytes += Buffer.byteLength(content, 'utf8');
-          if (totalBytes > 4 * 1024 * 1024) throw new Error('Agent file output exceeded 4MB limit.');
-          const saved = await persistWorkspaceFile(user.id, sessionId, String(action.path || ''), Buffer.from(content, 'utf8'), 'text/plain');
-          events.push({ type: 'write_file', path: saved.path, size: saved.size });
-          if (!previewHtml && saved.path.toLowerCase() === 'index.html') previewHtml = content;
-        } else if (action.type === 'delete_file') {
-          const filePath = safeWorkspacePath(String(action.path || ''));
-          await deleteWorkspaceFile(user.id, sessionId, filePath);
-          events.push({ type: 'delete_file', path: filePath });
-        } else if (action.type === 'run_command') {
-          const commandResult = await executeWorkspaceCommand(user.id, sessionId, String(action.command || ''));
-          events.push({ type: 'run_command', ...commandResult });
-          if (commandResult.code !== 0) break;
+        try {
+          if (action.type === 'write_file') {
+            const content = String(action.content || '');
+            totalBytes += Buffer.byteLength(content, 'utf8');
+            if (totalBytes > 8 * 1024 * 1024) throw new Error('Agent file output exceeded 8MB limit.');
+            const filePath = safeWorkspacePath(String(action.path || ''));
+            if (sandbox) await writeToExecutionSandbox(sandbox, filePath, content);
+            const saved = await persistWorkspaceFile(user.id, sessionId, filePath, Buffer.from(content, 'utf8'), /\.(html?|css|js|jsx|ts|tsx|json|md|txt|svg|xml|sql|py)$/i.test(filePath) ? 'text/plain' : 'application/octet-stream');
+            events.push({ type: 'write_file', path: saved.path, size: saved.size, status: 'done' });
+            if (!previewHtml && filePath.toLowerCase() === 'index.html') previewHtml = content;
+          } else if (action.type === 'delete_file') {
+            const filePath = safeWorkspacePath(String(action.path || ''));
+            if (sandbox) await sandbox.commands.run(`rm -f -- '${filePath.replace(/'/g, "'\\''")}'`, { timeoutMs: 30_000 });
+            await deleteWorkspaceFile(user.id, sessionId, filePath);
+            events.push({ type: 'delete_file', path: filePath, status: 'done' });
+          } else if (action.type === 'run_command') {
+            const command = String(action.command || '');
+            parseAllowedCommand(command);
+            const commandResult = sandbox ? await runInExecutionSandbox(sandbox, command) : await executeWorkspaceCommand(user.id, sessionId, command);
+            events.push({ type: 'run_command', command, code: commandResult.code, status: commandResult.code === 0 ? 'done' : 'failed' });
+            if (commandResult.code !== 0) {
+              executionError = commandResult;
+              break;
+            }
+          }
+        } catch (actionError: any) {
+          executionError = actionError;
+          events.push({ type: action.type || 'action', path: action.path, command: action.command, status: 'failed' });
+          break;
         }
       }
-      res.json({ message: String(plan.message || 'Agent task completed.'), events, previewHtml, modelTier: tier });
+
+      // One bounded repair pass: send only the build/runtime failure back to Apex.
+      if (executionError && sandbox) {
+        const errorText = String(executionError.stderr || executionError.message || 'Unknown build failure').slice(-12000);
+        const repairSystem = `You are RextFlex Ai Apex acting as a build-fix engineer inside an E2B sandbox. Return ONLY valid JSON in the same agent shape. Fix the current project based on the build error. Keep the repair minimal and concrete. Use write_file/delete_file/run_command only.`;
+        try {
+          const repairRaw = await callProvider('apex', [{ role: 'user', content: `Original request: ${prompt}\n\nBuild/execution error:\n${errorText}` }], repairSystem, { jsonMode: true });
+          const repairPlan = await getAgentPlan(repairRaw, 'apex', prompt);
+          const repairActions = Array.isArray(repairPlan.actions) ? repairPlan.actions.slice(0, 20) : [];
+          for (const action of repairActions) {
+            if (action.type === 'write_file') {
+              const filePath = safeWorkspacePath(String(action.path || ''));
+              const content = String(action.content || '');
+              await sandbox.files.write(filePath, content);
+              const saved = await persistWorkspaceFile(user.id, sessionId, filePath, Buffer.from(content, 'utf8'), 'text/plain');
+              events.push({ type: 'write_file', path: saved.path, size: saved.size, status: 'done' });
+              if (!previewHtml && filePath.toLowerCase() === 'index.html') previewHtml = content;
+            } else if (action.type === 'delete_file') {
+              const filePath = safeWorkspacePath(String(action.path || ''));
+              await sandbox.commands.run(`rm -f -- '${filePath.replace(/'/g, "'\\''")}'`, { timeoutMs: 30_000 });
+              await deleteWorkspaceFile(user.id, sessionId, filePath);
+              events.push({ type: 'delete_file', path: filePath, status: 'done' });
+            } else if (action.type === 'run_command') {
+              const command = String(action.command || '');
+              parseAllowedCommand(command);
+              const result = await runInExecutionSandbox(sandbox, command);
+              events.push({ type: 'run_command', command, code: result.code, status: result.code === 0 ? 'done' : 'failed' });
+              if (result.code !== 0) break;
+            }
+          }
+          if (typeof repairPlan.previewHtml === 'string' && repairPlan.previewHtml) previewHtml = repairPlan.previewHtml;
+          executionError = null;
+        } catch (repairError) {
+          console.warn('[AI Studio] Apex repair pass failed:', repairError);
+        }
+      }
+
+      const message = String(plan.message || (executionError ? 'Agent created the project but one background build step still needs attention.' : 'Agent task completed.'));
+      await insertChatMessage(id('msg'), sessionId, 'assistant', { role: 'assistant', text: message, timestamp: new Date().toISOString(), agentMode: true, agentEvents: events.map(({ type, path, command, status }) => ({ type, path, command, status })), generatedWebsiteHtml: previewHtml || undefined });
+      res.json({ message, events, previewHtml, modelTier: 'apex', execution: sandbox ? 'e2b' : 'fallback' });
     } catch (error: any) {
       console.error('POST /api/agent/run', error);
-      res.status(500).json({ error: error?.message || 'Agent failed' });
+      const message = error?.message || 'Agent failed';
+      const status = /invalid JSON|empty output|Agent prompt is required/i.test(message) ? 422 : 500;
+      res.status(status).json({ error: message, code: status === 422 ? 'AGENT_OUTPUT_INVALID' : 'AGENT_FAILED' });
     }
   });
 

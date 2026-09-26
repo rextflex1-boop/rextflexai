@@ -1,6 +1,8 @@
 {
   "name": "RextFlex Ai",
-  "description": "RextFlex Ai - Next-generation AI platform login and workspace.",
+  "description": "RextFlex Ai \u2014 chat-first AI coding agent with E2B sandbox execution, web research, file analysis, and 3D generation.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
